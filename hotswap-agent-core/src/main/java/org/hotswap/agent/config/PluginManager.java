@@ -1,19 +1,40 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.config;
+
+import java.io.IOException;
+import java.lang.instrument.ClassDefinition;
+import java.lang.instrument.Instrumentation;
+import java.security.ProtectionDomain;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import org.hotswap.agent.command.Scheduler;
 import org.hotswap.agent.command.impl.SchedulerImpl;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.util.HotswapTransformer;
 import org.hotswap.agent.util.classloader.ClassLoaderDefineClassPatcher;
-import org.hotswap.agent.util.classloader.ClassLoaderPatcher;
 import org.hotswap.agent.watch.Watcher;
 import org.hotswap.agent.watch.WatcherFactory;
-
-import java.io.IOException;
-import java.lang.instrument.ClassDefinition;
-import java.lang.instrument.Instrumentation;
-import java.security.ProtectionDomain;
-import java.util.*;
 
 /**
  * The main agent plugin manager, well known singleton controller.
@@ -45,6 +66,8 @@ public class PluginManager {
 
     // the instrumentation API
     private Instrumentation instrumentation;
+
+    private Object hotswapLock = new Object();
 
     //////////////////////////   PLUGINS /////////////////////////////////////
 
@@ -78,9 +101,8 @@ public class PluginManager {
     /**
      * Check if plugin is initialized in classLoader.
      *
-     * @param pluginClass type of the plugin
+     * @param pluginClassName type of the plugin
      * @param classLoader classloader of the plugin
-     * @param checkParent for parent classloaders as well?
      * @return true/false
      */
     public boolean isPluginInitialized(String pluginClassName, ClassLoader classLoader) {
@@ -126,9 +148,9 @@ public class PluginManager {
         instrumentation.addTransformer(hotswapTransformer);
     }
 
-    ClassLoaderPatcher classLoaderPatcher = new ClassLoaderDefineClassPatcher();
-    Map<ClassLoader, PluginConfiguration> classLoaderConfigurations = new HashMap<ClassLoader, PluginConfiguration>();
-    Set<ClassLoaderInitListener> classLoaderInitListeners = new HashSet<ClassLoaderInitListener>();
+    ClassLoaderDefineClassPatcher classLoaderPatcher = new ClassLoaderDefineClassPatcher();
+    Map<ClassLoader, PluginConfiguration> classLoaderConfigurations = new HashMap<>();
+    Set<ClassLoaderInitListener> classLoaderInitListeners = new HashSet<>();
 
     public void registerClassLoaderInitListener(ClassLoaderInitListener classLoaderInitListener) {
         classLoaderInitListeners.add(classLoaderInitListener);
@@ -266,7 +288,9 @@ public class PluginManager {
             }
             try {
                 LOGGER.reload("Reloading classes {} (autoHotswap)", Arrays.toString(classNames));
-                instrumentation.redefineClasses(definitions);
+                synchronized (hotswapLock) {
+                    instrumentation.redefineClasses(definitions);
+                }
                 LOGGER.debug("... reloaded classes {} (autoHotswap)", Arrays.toString(classNames));
             } catch (Exception e) {
                 throw new IllegalStateException("Unable to redefine classes", e);

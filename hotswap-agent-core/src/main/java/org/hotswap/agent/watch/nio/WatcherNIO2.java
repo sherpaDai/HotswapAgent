@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2013-2019 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -19,6 +19,7 @@
 package org.hotswap.agent.watch.nio;
 
 import java.io.IOException;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.EnumSet;
 
 /**
  * NIO2 watcher implementation.
@@ -48,21 +50,12 @@ public class WatcherNIO2 extends AbstractNIO2Watcher {
         super();
     }
 
-
-    /**
-     * Register the given directory, and all its sub-directories, with the
-     * WatchService.
-     */
     @Override
-    protected void registerAll(final Path parent, Path start) throws IOException {
+    protected void registerAll(final Path dir) throws IOException {
         // register directory and sub-directories
-        if (parent != null) {
-            LOGGER.debug("Registering directory  {} under parent {}", start, parent);
-        } else {
-            LOGGER.debug("Registering directory  {}", start);
-        }
+        LOGGER.debug("Registering directory  {}", dir);
 
-        Files.walkFileTree(start, new SimpleFileVisitor<Path>() {
+        Files.walkFileTree(dir, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 register(dir);
@@ -77,7 +70,6 @@ public class WatcherNIO2 extends AbstractNIO2Watcher {
     private void register(Path dir) throws IOException {
         // try to set high sensitivity
         final WatchKey key = HIGH == null ? dir.register(watcher, KINDS) : dir.register(watcher, KINDS, HIGH);
-
-        keys.put(key, PathPair.get(dir));
+        keys.put(key, dir);
     }
 }

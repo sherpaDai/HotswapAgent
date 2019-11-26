@@ -16,11 +16,15 @@
 
 package org.hotswap.agent.javassist.compiler.ast;
 
+import org.hotswap.agent.javassist.compiler.CompileError;
+
 /**
  * A linked list.
  * The right subtree must be an ASTList object or null.
  */
 public class ASTList extends ASTree {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     private ASTree left;
     private ASTList right;
 
@@ -38,28 +42,24 @@ public class ASTList extends ASTree {
         return new ASTList(e1, new ASTList(e2, new ASTList(e3)));
     }
 
-    public ASTree getLeft() {
-        return left;
-    }
+    @Override
+    public ASTree getLeft() { return left; }
 
-    public ASTree getRight() {
-        return right;
-    }
+    @Override
+    public ASTree getRight() { return right; }
 
-    public void setLeft(ASTree _left) {
-        left = _left;
-    }
+    @Override
+    public void setLeft(ASTree _left) { left = _left; }
 
+    @Override
     public void setRight(ASTree _right) {
-        right = (ASTList) _right;
+        right = (ASTList)_right;
     }
 
     /**
      * Returns the car part of the list.
      */
-    public ASTree head() {
-        return left;
-    }
+    public ASTree head() { return left; }
 
     public void setHead(ASTree _head) {
         left = _head;
@@ -68,18 +68,16 @@ public class ASTList extends ASTree {
     /**
      * Returns the cdr part of the list.
      */
-    public ASTList tail() {
-        return right;
-    }
+    public ASTList tail() { return right; }
 
     public void setTail(ASTList _tail) {
         right = _tail;
     }
 
-    public void accept(Visitor v) throws org.hotswap.agent.javassist.compiler.CompileError {
-        v.atASTList(this);
-    }
+    @Override
+    public void accept(Visitor v) throws CompileError { v.atASTList(this); }
 
+    @Override
     public String toString() {
         StringBuffer sbuf = new StringBuffer();
         sbuf.append("(<");
@@ -121,7 +119,7 @@ public class ASTList extends ASTree {
      * Returns a sub list of the list.  The sub list begins with the
      * n-th element of the list.
      *
-     * @param nth zero or more than zero.
+     * @param nth       zero or more than zero.
      */
     public ASTList sublist(int nth) {
         ASTList list = this;
@@ -158,13 +156,11 @@ public class ASTList extends ASTree {
     public static ASTList concat(ASTList a, ASTList b) {
         if (a == null)
             return b;
-        else {
-            ASTList list = a;
-            while (list.right != null)
-                list = list.right;
+        ASTList list = a;
+        while (list.right != null)
+            list = list.right;
 
-            list.right = b;
-            return a;
-        }
+        list.right = b;
+        return a;
     }
 }

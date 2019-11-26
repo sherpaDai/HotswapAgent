@@ -15,64 +15,52 @@
  */
 package org.hotswap.agent.javassist.bytecode.analysis;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
+
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.CtClass;
+import org.hotswap.agent.javassist.NotFoundException;
 
 /**
  * Represents a JVM type in data-flow analysis. This abstraction is necessary since
  * a JVM type not only includes all normal Java types, but also a few special types
  * that are used by the JVM internally. See the static field types on this class for
  * more info on these special types.
- * <p/>
+ *
  * All primitive and special types reuse the same instance, so identity comparison can
  * be used when examining them. Normal java types must use {@link #equals(Object)} to
  * compare type instances.
- * <p/>
+ *
  * In most cases, applications which consume this API, only need to call {@link #getCtClass()}
  * to obtain the needed type information.
  *
  * @author Jason T. Greene
  */
 public class Type {
-    private final org.hotswap.agent.javassist.CtClass clazz;
+    private final CtClass clazz;
     private final boolean special;
 
-    private static final Map prims = new IdentityHashMap();
-    /**
-     * Represents the double primitive type
-     */
-    public static final Type DOUBLE = new Type(org.hotswap.agent.javassist.CtClass.doubleType);
-    /**
-     * Represents the boolean primitive type
-     */
-    public static final Type BOOLEAN = new Type(org.hotswap.agent.javassist.CtClass.booleanType);
-    /**
-     * Represents the long primitive type
-     */
-    public static final Type LONG = new Type(org.hotswap.agent.javassist.CtClass.longType);
-    /**
-     * Represents the char primitive type
-     */
-    public static final Type CHAR = new Type(org.hotswap.agent.javassist.CtClass.charType);
-    /**
-     * Represents the byte primitive type
-     */
-    public static final Type BYTE = new Type(org.hotswap.agent.javassist.CtClass.byteType);
-    /**
-     * Represents the short primitive type
-     */
-    public static final Type SHORT = new Type(org.hotswap.agent.javassist.CtClass.shortType);
-    /**
-     * Represents the integer primitive type
-     */
-    public static final Type INTEGER = new Type(org.hotswap.agent.javassist.CtClass.intType);
-    /**
-     * Represents the float primitive type
-     */
-    public static final Type FLOAT = new Type(org.hotswap.agent.javassist.CtClass.floatType);
-    /**
-     * Represents the void primitive type
-     */
-    public static final Type VOID = new Type(org.hotswap.agent.javassist.CtClass.voidType);
+    private static final Map<CtClass,Type> prims = new IdentityHashMap<CtClass,Type>();
+    /** Represents the double primitive type */
+    public static final Type DOUBLE = new Type(CtClass.doubleType);
+    /** Represents the boolean primitive type */
+    public static final Type BOOLEAN = new Type(CtClass.booleanType);
+    /** Represents the long primitive type */
+    public static final Type LONG = new Type(CtClass.longType);
+    /** Represents the char primitive type */
+    public static final Type CHAR = new Type(CtClass.charType);
+    /** Represents the byte primitive type */
+    public static final Type BYTE = new Type(CtClass.byteType);
+    /** Represents the short primitive type */
+    public static final Type SHORT = new Type(CtClass.shortType);
+    /** Represents the integer primitive type */
+    public static final Type INTEGER = new Type(CtClass.intType);
+    /** Represents the float primitive type */
+    public static final Type FLOAT = new Type(CtClass.floatType);
+    /** Represents the void primitive type */
+    public static final Type VOID = new Type(CtClass.voidType);
 
     /**
      * Represents an unknown, or null type. This occurs when aconst_null is used.
@@ -91,9 +79,7 @@ public class Type {
      */
     public static final Type RETURN_ADDRESS = new Type(null, true);
 
-    /**
-     * A placeholder used by the analyzer for the second word position of a double-word type
-     */
+    /** A placeholder used by the analyzer for the second word position of a double-word type */
     public static final Type TOP = new Type(null, true);
 
     /**
@@ -105,33 +91,25 @@ public class Type {
      */
     public static final Type BOGUS = new Type(null, true);
 
-    /**
-     * Represents the java.lang.Object reference type
-     */
+    /** Represents the java.lang.Object reference type */
     public static final Type OBJECT = lookupType("java.lang.Object");
-    /**
-     * Represents the java.io.Serializable reference type
-     */
+    /** Represents the java.io.Serializable reference type */
     public static final Type SERIALIZABLE = lookupType("java.io.Serializable");
-    /**
-     * Represents the java.lang.Coneable reference type
-     */
+    /** Represents the java.lang.Coneable reference type */
     public static final Type CLONEABLE = lookupType("java.lang.Cloneable");
-    /**
-     * Represents the java.lang.Throwable reference type
-     */
+    /** Represents the java.lang.Throwable reference type */
     public static final Type THROWABLE = lookupType("java.lang.Throwable");
 
     static {
-        prims.put(org.hotswap.agent.javassist.CtClass.doubleType, DOUBLE);
-        prims.put(org.hotswap.agent.javassist.CtClass.longType, LONG);
-        prims.put(org.hotswap.agent.javassist.CtClass.charType, CHAR);
-        prims.put(org.hotswap.agent.javassist.CtClass.shortType, SHORT);
-        prims.put(org.hotswap.agent.javassist.CtClass.intType, INTEGER);
-        prims.put(org.hotswap.agent.javassist.CtClass.floatType, FLOAT);
-        prims.put(org.hotswap.agent.javassist.CtClass.byteType, BYTE);
-        prims.put(org.hotswap.agent.javassist.CtClass.booleanType, BOOLEAN);
-        prims.put(org.hotswap.agent.javassist.CtClass.voidType, VOID);
+        prims.put(CtClass.doubleType, DOUBLE);
+        prims.put(CtClass.longType, LONG);
+        prims.put(CtClass.charType, CHAR);
+        prims.put(CtClass.shortType, SHORT);
+        prims.put(CtClass.intType, INTEGER);
+        prims.put(CtClass.floatType, FLOAT);
+        prims.put(CtClass.byteType, BYTE);
+        prims.put(CtClass.booleanType, BOOLEAN);
+        prims.put(CtClass.voidType, VOID);
 
     }
 
@@ -143,24 +121,24 @@ public class Type {
      * @param clazz The java class
      * @return a type instance for this class
      */
-    public static Type get(org.hotswap.agent.javassist.CtClass clazz) {
-        Type type = (Type) prims.get(clazz);
+    public static Type get(CtClass clazz) {
+        Type type = (Type)prims.get(clazz);
         return type != null ? type : new Type(clazz);
     }
 
     private static Type lookupType(String name) {
         try {
-            return new Type(org.hotswap.agent.javassist.ClassPool.getDefault().get(name));
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+             return new Type(ClassPool.getDefault().get(name));
+        } catch (NotFoundException e) {
             throw new RuntimeException(e);
         }
     }
 
-    Type(org.hotswap.agent.javassist.CtClass clazz) {
+    Type(CtClass clazz) {
         this(clazz, false);
     }
 
-    private Type(org.hotswap.agent.javassist.CtClass clazz, boolean special) {
+    private Type(CtClass clazz, boolean special) {
         this.clazz = clazz;
         this.special = special;
     }
@@ -177,7 +155,7 @@ public class Type {
      * @return the number of words needed to hold this type
      */
     public int getSize() {
-        return clazz == org.hotswap.agent.javassist.CtClass.doubleType || clazz == org.hotswap.agent.javassist.CtClass.longType || this == TOP ? 2 : 1;
+        return clazz == CtClass.doubleType || clazz == CtClass.longType || this == TOP ? 2 : 1;
     }
 
     /**
@@ -185,7 +163,7 @@ public class Type {
      *
      * @return the class for this type, or null if special
      */
-    public org.hotswap.agent.javassist.CtClass getCtClass() {
+    public CtClass getCtClass() {
         return clazz;
     }
 
@@ -229,7 +207,7 @@ public class Type {
         String name = clazz.getName();
         int pos = name.length() - 1;
         int count = 0;
-        while (name.charAt(pos) == ']') {
+        while (name.charAt(pos) == ']' ) {
             pos -= 2;
             count++;
         }
@@ -247,14 +225,14 @@ public class Type {
         if (this.clazz == null || !this.clazz.isArray())
             return null;
 
-        org.hotswap.agent.javassist.CtClass component;
+        CtClass component;
         try {
             component = this.clazz.getComponentType();
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        } catch (NotFoundException e) {
             throw new RuntimeException(e);
         }
 
-        Type type = (Type) prims.get(component);
+        Type type = (Type)prims.get(component);
         return (type != null) ? type : new Type(component);
     }
 
@@ -274,10 +252,10 @@ public class Type {
             return true;
 
         if (type instanceof MultiType)
-            return ((MultiType) type).isAssignableTo(this);
+            return ((MultiType)type).isAssignableTo(this);
 
         if (type instanceof MultiArrayType)
-            return ((MultiArrayType) type).isAssignableTo(this);
+            return ((MultiArrayType)type).isAssignableTo(this);
 
 
         // Primitives and Special types must be identical
@@ -313,7 +291,7 @@ public class Type {
             return type;
 
         // Unequal primitives and special types can not be merged
-        if (!type.isReference() || !this.isReference())
+        if (! type.isReference() || ! this.isReference())
             return BOGUS;
 
         // Centralize merging of multi-interface types
@@ -325,12 +303,12 @@ public class Type {
 
         try {
             return mergeClasses(type);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        } catch (NotFoundException e) {
             throw new RuntimeException(e);
         }
     }
 
-    Type getRootComponent(Type type) {
+   Type getRootComponent(Type type) {
         while (type.isArray())
             type = type.getComponent();
 
@@ -346,7 +324,7 @@ public class Type {
         Type type;
         try {
             type = Type.get(getClassPool(rootComponent).get(name));
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        } catch (NotFoundException e) {
             throw new RuntimeException(e);
         }
 
@@ -354,7 +332,7 @@ public class Type {
     }
 
     String arrayName(String component, int dims) {
-        // Using char[] since we have no StringBuilder in JDK4, and StringBuffer is slow.
+     // Using char[] since we have no StringBuilder in JDK4, and StringBuffer is slow.
         // Although, this is more efficient even if we did have one.
         int i = component.length();
         int size = i + dims * 2;
@@ -368,9 +346,9 @@ public class Type {
         return component;
     }
 
-    private org.hotswap.agent.javassist.ClassPool getClassPool(Type rootComponent) {
-        org.hotswap.agent.javassist.ClassPool pool = rootComponent.clazz.getClassPool();
-        return pool != null ? pool : org.hotswap.agent.javassist.ClassPool.getDefault();
+    private ClassPool getClassPool(Type rootComponent) {
+        ClassPool pool = rootComponent.clazz.getClassPool();
+        return pool != null ? pool : ClassPool.getDefault();
     }
 
     private Type mergeArray(Type type) {
@@ -409,20 +387,20 @@ public class Type {
         return createArray(OBJECT, targetDims);
     }
 
-    private static org.hotswap.agent.javassist.CtClass findCommonSuperClass(org.hotswap.agent.javassist.CtClass one, org.hotswap.agent.javassist.CtClass two) throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtClass deep = one;
-        org.hotswap.agent.javassist.CtClass shallow = two;
-        org.hotswap.agent.javassist.CtClass backupShallow = shallow;
-        org.hotswap.agent.javassist.CtClass backupDeep = deep;
+    private static CtClass findCommonSuperClass(CtClass one, CtClass two) throws NotFoundException {
+        CtClass deep = one;
+        CtClass shallow = two;
+        CtClass backupShallow = shallow;
+        CtClass backupDeep = deep;
 
         // Phase 1 - Find the deepest hierarchy, set deep and shallow correctly
-        for (; ; ) {
+        for (;;) {
             // In case we get lucky, and find a match early
             if (eq(deep, shallow) && deep.getSuperclass() != null)
                 return deep;
 
-            org.hotswap.agent.javassist.CtClass deepSuper = deep.getSuperclass();
-            org.hotswap.agent.javassist.CtClass shallowSuper = shallow.getSuperclass();
+            CtClass deepSuper = deep.getSuperclass();
+            CtClass shallowSuper = shallow.getSuperclass();
 
             if (shallowSuper == null) {
                 // right, now reset shallow
@@ -446,7 +424,7 @@ public class Type {
         }
 
         // Phase 2 - Move deepBackup up by (deep end - deep)
-        for (; ; ) {
+        for (;;) {
             deep = deep.getSuperclass();
             if (deep == null)
                 break;
@@ -466,14 +444,14 @@ public class Type {
         return deep;
     }
 
-    private Type mergeClasses(Type type) throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtClass superClass = findCommonSuperClass(this.clazz, type.clazz);
+    private Type mergeClasses(Type type) throws NotFoundException {
+        CtClass superClass = findCommonSuperClass(this.clazz, type.clazz);
 
         // If its Object, then try and find a common interface(s)
         if (superClass.getSuperclass() == null) {
-            Map interfaces = findCommonInterfaces(type);
+            Map<String,CtClass> interfaces = findCommonInterfaces(type);
             if (interfaces.size() == 1)
-                return new Type((org.hotswap.agent.javassist.CtClass) interfaces.values().iterator().next());
+                return new Type((CtClass) interfaces.values().iterator().next());
             if (interfaces.size() > 1)
                 return new MultiType(interfaces);
 
@@ -482,7 +460,7 @@ public class Type {
         }
 
         // Check for a common interface that is not on the found supertype
-        Map commonDeclared = findExclusiveDeclaredInterfaces(type, superClass);
+        Map<String,CtClass> commonDeclared = findExclusiveDeclaredInterfaces(type, superClass);
         if (commonDeclared.size() > 0) {
             return new MultiType(commonDeclared, new Type(superClass));
         }
@@ -490,21 +468,19 @@ public class Type {
         return new Type(superClass);
     }
 
-    private Map findCommonInterfaces(Type type) {
-        Map typeMap = getAllInterfaces(type.clazz, null);
-        Map thisMap = getAllInterfaces(this.clazz, null);
+    private Map<String,CtClass> findCommonInterfaces(Type type) {
+        Map<String,CtClass> typeMap = getAllInterfaces(type.clazz, null);
+        Map<String,CtClass> thisMap = getAllInterfaces(this.clazz, null);
 
         return findCommonInterfaces(typeMap, thisMap);
     }
 
-    private Map findExclusiveDeclaredInterfaces(Type type, org.hotswap.agent.javassist.CtClass exclude) {
-        Map typeMap = getDeclaredInterfaces(type.clazz, null);
-        Map thisMap = getDeclaredInterfaces(this.clazz, null);
-        Map excludeMap = getAllInterfaces(exclude, null);
+    private Map<String,CtClass> findExclusiveDeclaredInterfaces(Type type, CtClass exclude) {
+        Map<String,CtClass> typeMap = getDeclaredInterfaces(type.clazz, null);
+        Map<String,CtClass> thisMap = getDeclaredInterfaces(this.clazz, null);
+        Map<String,CtClass> excludeMap = getAllInterfaces(exclude, null);
 
-        Iterator i = excludeMap.keySet().iterator();
-        while (i.hasNext()) {
-            Object intf = i.next();
+        for (String intf:excludeMap.keySet()) {
             typeMap.remove(intf);
             thisMap.remove(intf);
         }
@@ -513,50 +489,51 @@ public class Type {
     }
 
 
-    Map findCommonInterfaces(Map typeMap, Map alterMap) {
-        Iterator i = alterMap.keySet().iterator();
-        while (i.hasNext()) {
-            if (!typeMap.containsKey(i.next()))
-                i.remove();
-        }
+    Map<String,CtClass> findCommonInterfaces(Map<String,CtClass> typeMap, Map<String,CtClass> alterMap) {
+        if (alterMap == null)
+            alterMap = new HashMap<String,CtClass>();
+
+        if (typeMap == null||typeMap.isEmpty())
+            alterMap.clear();
+
+        for (String name:alterMap.keySet())
+            if (!typeMap.containsKey(name))
+                alterMap.remove(name);
 
         // Reduce to subinterfaces
         // This does not need to be recursive since we make a copy,
         // and that copy contains all super types for the whole hierarchy
-        i = new ArrayList(alterMap.values()).iterator();
-        while (i.hasNext()) {
-            org.hotswap.agent.javassist.CtClass intf = (org.hotswap.agent.javassist.CtClass) i.next();
-            org.hotswap.agent.javassist.CtClass[] interfaces;
+        for (CtClass intf:alterMap.values()) {
+            CtClass[] interfaces;
             try {
                 interfaces = intf.getInterfaces();
-            } catch (org.hotswap.agent.javassist.NotFoundException e) {
+            } catch (NotFoundException e) {
                 throw new RuntimeException(e);
             }
 
-            for (int c = 0; c < interfaces.length; c++)
-                alterMap.remove(interfaces[c].getName());
+            for (CtClass c:interfaces)
+                alterMap.remove(c.getName());
         }
 
         return alterMap;
     }
 
-    Map getAllInterfaces(org.hotswap.agent.javassist.CtClass clazz, Map map) {
+    Map<String,CtClass> getAllInterfaces(CtClass clazz, Map<String,CtClass> map) {
         if (map == null)
-            map = new HashMap();
+            map = new HashMap<String,CtClass>();
 
         if (clazz.isInterface())
             map.put(clazz.getName(), clazz);
         do {
             try {
-                org.hotswap.agent.javassist.CtClass[] interfaces = clazz.getInterfaces();
-                for (int i = 0; i < interfaces.length; i++) {
-                    org.hotswap.agent.javassist.CtClass intf = interfaces[i];
+                CtClass[] interfaces = clazz.getInterfaces();
+                for (CtClass intf:interfaces) {
                     map.put(intf.getName(), intf);
                     getAllInterfaces(intf, map);
                 }
 
                 clazz = clazz.getSuperclass();
-            } catch (org.hotswap.agent.javassist.NotFoundException e) {
+            } catch (NotFoundException e) {
                 throw new RuntimeException(e);
             }
         } while (clazz != null);
@@ -564,22 +541,21 @@ public class Type {
         return map;
     }
 
-    Map getDeclaredInterfaces(org.hotswap.agent.javassist.CtClass clazz, Map map) {
+    Map<String,CtClass> getDeclaredInterfaces(CtClass clazz, Map<String,CtClass> map) {
         if (map == null)
-            map = new HashMap();
+            map = new HashMap<String,CtClass>();
 
         if (clazz.isInterface())
             map.put(clazz.getName(), clazz);
 
-        org.hotswap.agent.javassist.CtClass[] interfaces;
+        CtClass[] interfaces;
         try {
             interfaces = clazz.getInterfaces();
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        } catch (NotFoundException e) {
             throw new RuntimeException(e);
         }
 
-        for (int i = 0; i < interfaces.length; i++) {
-            org.hotswap.agent.javassist.CtClass intf = interfaces[i];
+        for (CtClass intf:interfaces) {
             map.put(intf.getName(), intf);
             getDeclaredInterfaces(intf, map);
         }
@@ -587,17 +563,24 @@ public class Type {
         return map;
     }
 
-    public boolean equals(Object o) {
-        if (!(o instanceof Type))
-            return false;
-
-        return o.getClass() == getClass() && eq(clazz, ((Type) o).clazz);
+    @Override
+    public int hashCode() {
+        return getClass().hashCode() + clazz.hashCode();
     }
 
-    static boolean eq(org.hotswap.agent.javassist.CtClass one, org.hotswap.agent.javassist.CtClass two) {
+    @Override
+    public boolean equals(Object o) {
+        if (! (o instanceof Type))
+            return false;
+
+        return o.getClass() == getClass() && eq(clazz, ((Type)o).clazz);
+    }
+
+    static boolean eq(CtClass one, CtClass two) {
         return one == two || (one != null && two != null && one.getName().equals(two.getName()));
     }
 
+    @Override
     public String toString() {
         if (this == BOGUS)
             return "BOGUS";

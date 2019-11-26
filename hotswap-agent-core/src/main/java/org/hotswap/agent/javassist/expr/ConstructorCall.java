@@ -17,6 +17,7 @@
 package org.hotswap.agent.javassist.expr;
 
 import org.hotswap.agent.javassist.CtClass;
+import org.hotswap.agent.javassist.CtConstructor;
 import org.hotswap.agent.javassist.CtMethod;
 import org.hotswap.agent.javassist.NotFoundException;
 import org.hotswap.agent.javassist.bytecode.CodeIterator;
@@ -39,6 +40,7 @@ public class ConstructorCall extends MethodCall {
     /**
      * Returns <code>"super"</code> or "<code>"this"</code>.
      */
+    @Override
     public String getMethodName() {
         return isSuper() ? "super" : "this";
     }
@@ -48,6 +50,7 @@ public class ConstructorCall extends MethodCall {
      *
      * @see #getConstructor()
      */
+    @Override
     public CtMethod getMethod() throws NotFoundException {
         throw new NotFoundException("this is a constructor call.  Call getConstructor().");
     }
@@ -55,7 +58,7 @@ public class ConstructorCall extends MethodCall {
     /**
      * Returns the called constructor.
      */
-    public org.hotswap.agent.javassist.CtConstructor getConstructor() throws NotFoundException {
+    public CtConstructor getConstructor() throws NotFoundException {
         return getCtClass().getConstructor(getSignature());
     }
 
@@ -63,6 +66,7 @@ public class ConstructorCall extends MethodCall {
      * Returns true if the called constructor is not <code>this()</code>
      * but <code>super()</code> (a constructor declared in the super class).
      */
+    @Override
     public boolean isSuper() {
         return super.isSuper();
     }

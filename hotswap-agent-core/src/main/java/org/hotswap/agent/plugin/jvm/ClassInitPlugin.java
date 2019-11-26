@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.jvm;
 
 import java.io.IOException;
@@ -32,7 +50,7 @@ public class ClassInitPlugin {
 
     private static AgentLogger LOGGER = AgentLogger.getLogger(ClassInitPlugin.class);
 
-    private static final String HOTSWAP_AGENT_CLINIT_METHOD = "__ha_clinit";
+    private static final String HOTSWAP_AGENT_CLINIT_METHOD = "$$ha$clinit";
 
     public static boolean reloadFlag;
 
@@ -55,7 +73,7 @@ public class ClassInitPlugin {
         CtConstructor clinit = ctClass.getClassInitializer();
 
         if (clinit != null) {
-            LOGGER.debug("Adding __ha_clinit to class: {}", className);
+            LOGGER.debug("Adding " + HOTSWAP_AGENT_CLINIT_METHOD + " to class: {}", className);
             CtConstructor haClinit = new CtConstructor(clinit, ctClass, null);
             haClinit.getMethodInfo().setName(HOTSWAP_AGENT_CLINIT_METHOD);
             haClinit.setModifiers(Modifier.PUBLIC | Modifier.STATIC);
@@ -90,7 +108,7 @@ public class ClassInitPlugin {
                                 }
                             }
                         } catch (Exception e) {
-                            LOGGER.error("Patching __ha_clinit method failed.", e);
+                            LOGGER.error("Patching " + HOTSWAP_AGENT_CLINIT_METHOD + " method failed.", e);
                         }
                     }
 
@@ -105,6 +123,7 @@ public class ClassInitPlugin {
                             Class<?> clazz = classLoader.loadClass(className);
                             Method m = clazz.getDeclaredMethod(HOTSWAP_AGENT_CLINIT_METHOD, new Class[] {});
                             if (m != null) {
+                                m.setAccessible(true);
                                 m.invoke(null, new Object[] {});
                             }
                         } catch (Exception e) {
@@ -113,10 +132,9 @@ public class ClassInitPlugin {
                             reloadFlag = false;
                         }
                     }
-                }, 150); // Hack : init should be done after dependant class redefinition. Since the class can 
-                         // be proxied by syntetic proxy, the class init must be scheduled after proxy redefinition.
-                         // Currently proxy redefinition (in ProxyPlugin) is scheduled with 100ms delay, therefore 
-                         // the class init must be scheduled after it.
+                }, 150); // Hack : init must be called after dependant class redefinition. Since the class can
+                         // be proxied, the class init must be scheduled after proxy redefinition. Currently proxy
+                         // redefinition (in ProxyPlugin) is scheduled with 100ms delay, therefore we use delay 150ms.
             } else {
                 reloadFlag = false;
             }
@@ -136,13 +154,14 @@ public class ClassInitPlugin {
                 }
             }
         } else {
-            LOGGER.error("Patching __ha_clinit method failed. Enum type expected {}", ctClass.getName());
+            LOGGER.error("Patching " + HOTSWAP_AGENT_CLINIT_METHOD + " method failed. Enum type expected {}", ctClass.getName());
         }
         return false;
     }
 
     private static boolean isSyntheticClass(Class<?> classBeingRedefined) {
         return classBeingRedefined.getSimpleName().contains("$$_javassist")
+                || classBeingRedefined.getSimpleName().contains("$$_jvst")
                 || classBeingRedefined.getName().startsWith("com.sun.proxy.$Proxy")
                 || classBeingRedefined.getSimpleName().contains("$$");
     }

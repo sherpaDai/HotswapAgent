@@ -20,6 +20,8 @@ import org.hotswap.agent.javassist.CannotCompileException;
 import org.hotswap.agent.javassist.NotFoundException;
 
 public class CompileError extends Exception {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     private Lex lex;
     private String reason;
 
@@ -41,14 +43,14 @@ public class CompileError extends Exception {
         this("cannot find " + e.getMessage());
     }
 
-    public Lex getLex() {
-        return lex;
-    }
+    public Lex getLex() { return lex; }
 
+    @Override
     public String getMessage() {
         return reason;
     }
 
+    @Override
     public String toString() {
         return "compile error: " + reason;
     }

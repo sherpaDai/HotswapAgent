@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.util.scanner;
 
 import org.hotswap.agent.logging.AgentLogger;
@@ -90,30 +108,36 @@ public class ClassPathScanner implements Scanner {
         LOGGER.trace("Scanning JAR file '{}'", urlFile);
 
         int separatorIndex = urlFile.indexOf(JAR_URL_SEPARATOR);
-        JarFile jarFile;
+        JarFile jarFile = null;
         String rootEntryPath;
 
-        if (separatorIndex != -1) {
-            String jarFileUrl = urlFile.substring(0, separatorIndex);
-            rootEntryPath = urlFile.substring(separatorIndex + JAR_URL_SEPARATOR.length());
-            jarFile = getJarFile(jarFileUrl);
-        } else {
-            rootEntryPath = "";
-            jarFile = new JarFile(urlFile);
-        }
+        try {
+            if (separatorIndex != -1) {
+                String jarFileUrl = urlFile.substring(0, separatorIndex);
+                rootEntryPath = urlFile.substring(separatorIndex + JAR_URL_SEPARATOR.length());
+                jarFile = getJarFile(jarFileUrl);
+            } else {
+                rootEntryPath = "";
+                jarFile = new JarFile(urlFile);
+            }
 
-        if (!"".equals(rootEntryPath) && !rootEntryPath.endsWith("/")) {
-            rootEntryPath = rootEntryPath + "/";
-        }
+            if (!"".equals(rootEntryPath) && !rootEntryPath.endsWith("/")) {
+                rootEntryPath = rootEntryPath + "/";
+            }
 
-        for (Enumeration<JarEntry> entries = jarFile.entries(); entries.hasMoreElements(); ) {
-            JarEntry entry = entries.nextElement();
-            String entryPath = entry.getName();
+            for (Enumeration<JarEntry> entries = jarFile.entries(); entries.hasMoreElements(); ) {
+                JarEntry entry = entries.nextElement();
+                String entryPath = entry.getName();
 
-            // class files inside entry
-            if (entryPath.startsWith(rootEntryPath) && entryPath.endsWith(".class")) {
-                LOGGER.trace("Visiting JAR entry {}", entryPath);
-                visitor.visit(jarFile.getInputStream(entry));
+                // class files inside entry
+                if (entryPath.startsWith(rootEntryPath) && entryPath.endsWith(".class")) {
+                    LOGGER.trace("Visiting JAR entry {}", entryPath);
+                    visitor.visit(jarFile.getInputStream(entry));
+                }
+            }
+        } finally {
+            if (jarFile != null) {
+                jarFile.close();
             }
         }
     }

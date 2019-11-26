@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.owb;
 
 import java.util.Properties;
@@ -6,6 +24,7 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.context.RequestScoped;
 import javax.enterprise.context.SessionScoped;
 import javax.inject.Singleton;
+import javax.servlet.http.HttpSession;
 
 import org.apache.webbeans.annotation.InitializedLiteral;
 import org.apache.webbeans.config.WebBeansContext;
@@ -15,11 +34,12 @@ import org.apache.webbeans.lifecycle.AbstractLifeCycle;
 import org.apache.webbeans.logger.WebBeansLoggerFacade;
 import org.apache.webbeans.spi.ContextsService;
 import org.apache.webbeans.web.context.WebContextsService;
+import org.apache.webbeans.web.lifecycle.test.MockHttpSession;
 
 public class HAOpenWebBeansTestLifeCycle extends AbstractLifeCycle
 {
     // private MockServletContextEvent servletContextEvent;
-    // private MockHttpSession mockHttpSession;
+    HttpSession mockHttpSession = new MockHttpSession();
 
     public HAOpenWebBeansTestLifeCycle()
     {
@@ -52,7 +72,7 @@ public class HAOpenWebBeansTestLifeCycle extends AbstractLifeCycle
         ContextsService contextsService = webBeansContext.getContextsService();
 
         contextsService.startContext(RequestScoped.class, null);
-        contextsService.startContext(SessionScoped.class, null);
+        contextsService.startContext(SessionScoped.class, mockHttpSession);
     }
 
     public void beforeStopApplication(Object endObject)
@@ -62,7 +82,7 @@ public class HAOpenWebBeansTestLifeCycle extends AbstractLifeCycle
         contextsService.endContext(Singleton.class, null);
         contextsService.endContext(ApplicationScoped.class, null);
         contextsService.endContext(RequestScoped.class, null);
-        contextsService.endContext(SessionScoped.class, null);
+        contextsService.endContext(SessionScoped.class, mockHttpSession);
 
         ELContextStore elStore = ELContextStore.getInstance(false);
         if (elStore == null)

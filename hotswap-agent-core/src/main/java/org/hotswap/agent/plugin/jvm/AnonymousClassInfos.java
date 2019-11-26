@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.jvm;
 
 import org.hotswap.agent.javassist.ClassPool;
@@ -48,7 +66,7 @@ public class AnonymousClassInfos {
     String className;
 
     // zero based index list of anonymous classes
-    List<AnonymousClassInfo> anonymousClassInfoList = new ArrayList<AnonymousClassInfo>();
+    List<AnonymousClassInfo> anonymousClassInfoList = new ArrayList<>();
 
     /**
      * Create info of the current state from the classloader via reflection.
@@ -123,11 +141,11 @@ public class AnonymousClassInfos {
      * @return map previous -> new. If no mapping to previous exists, synthetic class name is created.
      */
     private void calculateCompatibleTransitions() {
-        compatibleTransitions = new HashMap<AnonymousClassInfo, AnonymousClassInfo>();
+        compatibleTransitions = new HashMap<>();
 
         // create a copy to remove resolved items
-        List<AnonymousClassInfo> previousInfos = new ArrayList<AnonymousClassInfo>(previous.anonymousClassInfoList);
-        List<AnonymousClassInfo> currentInfos = new ArrayList<AnonymousClassInfo>(anonymousClassInfoList);
+        List<AnonymousClassInfo> previousInfos = new ArrayList<>(previous.anonymousClassInfoList);
+        List<AnonymousClassInfo> currentInfos = new ArrayList<>(anonymousClassInfoList);
 
         // previous classes are discarded and cannot be used
         if (previousInfos.size() > currentInfos.size()) {

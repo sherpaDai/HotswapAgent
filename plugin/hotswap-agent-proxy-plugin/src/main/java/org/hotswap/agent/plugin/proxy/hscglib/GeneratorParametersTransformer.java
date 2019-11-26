@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.proxy.hscglib;
 
 import java.lang.ref.WeakReference;
@@ -11,6 +29,7 @@ import org.hotswap.agent.javassist.CtMethod;
 import org.hotswap.agent.javassist.Modifier;
 import org.hotswap.agent.javassist.bytecode.MethodInfo;
 import org.hotswap.agent.logging.AgentLogger;
+import org.hotswap.agent.util.classloader.ClassLoaderHelper;
 
 /**
  * Inits plugin and adds bytecode generation call parameter recording
@@ -54,7 +73,6 @@ public class GeneratorParametersTransformer {
             // We use class name strings because some libraries repackage cglib to a different namespace to avoid
             // conflicts.
             if (interfaceName.endsWith(".GeneratorStrategy")) {
-                @SuppressWarnings("unchecked")
                 List<MethodInfo> methodInfos = cc.getClassFile2().getMethods();
                 for (MethodInfo method : methodInfos) {
                     if (method.getName().equals("generate") && method.getDescriptor().endsWith("[B")) {
@@ -79,14 +97,16 @@ public class GeneratorParametersTransformer {
             synchronized (classLoaderMaps) {
                 mapRef = classLoaderMaps.get(loader);
                 if (mapRef == null) {
-                    Map<String, Object> map = (Map<String, Object>) loader
-                            .loadClass(GeneratorParametersRecorder.class.getName()).getField("generatorParams")
-                            .get(null);
-                    mapRef = new WeakReference<Map<String, Object>>(map);
-                    classLoaderMaps.put(loader, mapRef);
+                    if (ClassLoaderHelper.isClassLoderStarted(loader)) {
+                        Map<String, Object> map = (Map<String, Object>) loader
+                                .loadClass(GeneratorParametersRecorder.class.getName()).getField("generatorParams")
+                                .get(null);
+                        mapRef = new WeakReference<Map<String, Object>>(map);
+                        classLoaderMaps.put(loader, mapRef);
+                    }
                 }
             }
-            Map<String, Object> map = mapRef.get();
+            Map<String, Object> map = mapRef != null ? mapRef.get() : null;
             if (map == null) {
                 return new HashMap<>();
             }

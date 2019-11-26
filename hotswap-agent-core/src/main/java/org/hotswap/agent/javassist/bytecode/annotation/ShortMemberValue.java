@@ -19,6 +19,9 @@ package org.hotswap.agent.javassist.bytecode.annotation;
 import java.io.IOException;
 import java.lang.reflect.Method;
 
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
+
 /**
  * Short integer constant value.
  *
@@ -32,9 +35,9 @@ public class ShortMemberValue extends MemberValue {
      * Constructs a short constant value.  The initial value is specified
      * by the constant pool entry at the given index.
      *
-     * @param index the index of a CONSTANT_Integer_info structure.
+     * @param index     the index of a CONSTANT_Integer_info structure.
      */
-    public ShortMemberValue(int index, org.hotswap.agent.javassist.bytecode.ConstPool cp) {
+    public ShortMemberValue(int index, ConstPool cp) {
         super('S', cp);
         this.valueIndex = index;
     }
@@ -42,9 +45,9 @@ public class ShortMemberValue extends MemberValue {
     /**
      * Constructs a short constant value.
      *
-     * @param s the initial value.
+     * @param s         the initial value.
      */
-    public ShortMemberValue(short s, org.hotswap.agent.javassist.bytecode.ConstPool cp) {
+    public ShortMemberValue(short s, ConstPool cp) {
         super('S', cp);
         setValue(s);
     }
@@ -52,16 +55,18 @@ public class ShortMemberValue extends MemberValue {
     /**
      * Constructs a short constant value.  The initial value is 0.
      */
-    public ShortMemberValue(org.hotswap.agent.javassist.bytecode.ConstPool cp) {
+    public ShortMemberValue(ConstPool cp) {
         super('S', cp);
-        setValue((short) 0);
+        setValue((short)0);
     }
 
-    Object getValue(ClassLoader cl, org.hotswap.agent.javassist.ClassPool cp, Method m) {
-        return new Short(getValue());
+    @Override
+    Object getValue(ClassLoader cl, ClassPool cp, Method m) {
+        return Short.valueOf(getValue());
     }
 
-    Class getType(ClassLoader cl) {
+    @Override
+    Class<?> getType(ClassLoader cl) {
         return short.class;
     }
 
@@ -69,7 +74,7 @@ public class ShortMemberValue extends MemberValue {
      * Obtains the value of the member.
      */
     public short getValue() {
-        return (short) cp.getIntegerInfo(valueIndex);
+        return (short)cp.getIntegerInfo(valueIndex);
     }
 
     /**
@@ -82,6 +87,7 @@ public class ShortMemberValue extends MemberValue {
     /**
      * Obtains the string representation of this object.
      */
+    @Override
     public String toString() {
         return Short.toString(getValue());
     }
@@ -89,6 +95,7 @@ public class ShortMemberValue extends MemberValue {
     /**
      * Writes the value.
      */
+    @Override
     public void write(AnnotationsWriter writer) throws IOException {
         writer.constValueIndex(getValue());
     }
@@ -96,6 +103,7 @@ public class ShortMemberValue extends MemberValue {
     /**
      * Accepts a visitor.
      */
+    @Override
     public void accept(MemberValueVisitor visitor) {
         visitor.visitShortMemberValue(this);
     }

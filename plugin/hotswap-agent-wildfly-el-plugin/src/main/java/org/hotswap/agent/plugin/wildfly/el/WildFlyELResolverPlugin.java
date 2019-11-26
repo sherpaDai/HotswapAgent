@@ -1,28 +1,27 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2013-2019 the HotswapAgent authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * This file is part of HotswapAgent.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
  */
 package org.hotswap.agent.plugin.wildfly.el;
 
-import java.net.URL;
-
-import org.hotswap.agent.annotation.FileEvent;
 import org.hotswap.agent.annotation.Init;
 import org.hotswap.agent.annotation.LoadEvent;
 import org.hotswap.agent.annotation.Maven;
 import org.hotswap.agent.annotation.OnClassLoadEvent;
-import org.hotswap.agent.annotation.OnResourceFileEvent;
 import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.annotation.Versions;
 import org.hotswap.agent.command.Scheduler;
@@ -43,21 +42,21 @@ import org.hotswap.agent.util.PluginManagerInvoker;
  * @author alpapad@gmail.com
  *
  */
-@Plugin(name = "WildFlyELResolver", description = "Purge WildFlyELResolver class cache on any class redefinition.", testedVersions = { "1.0.5.Final" }, expectedVersions = { "1.0.5.Final" })
+@Plugin(name = "WildFlyELResolver",
+        group = "groupELResolver",
+        description = "Purge WildFlyELResolver class cache on any class redefinition.",
+        testedVersions = { "1.0.5.Final" },
+        expectedVersions = { "1.0.5.Final" })
 @Versions(maven = { @Maven(value = "[1.0,)", artifactId = "jboss-el-api_3.0_spec", groupId = "org.jboss.spec.javax.el") })
 public class WildFlyELResolverPlugin {
 
-    /** The logger. */
     private static AgentLogger LOGGER = AgentLogger.getLogger(WildFlyELResolverPlugin.class);
 
-    /** The Constant PURGE_CLASS_CACHE_METHOD_NAME. */
-    public static final String PURGE_CLASS_CACHE_METHOD_NAME = "__resetCache";
+    public static final String PURGE_CLASS_CACHE_METHOD_NAME = "$$ha$resetCache";
 
-    /** The scheduler. */
     @Init
     Scheduler scheduler;
 
-    /** The app class loader. */
     @Init
     ClassLoader appClassLoader;
 

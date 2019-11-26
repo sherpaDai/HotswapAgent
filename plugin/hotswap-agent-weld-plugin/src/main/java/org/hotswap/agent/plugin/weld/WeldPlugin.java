@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.weld;
 
 import java.io.File;
@@ -21,9 +39,16 @@ import org.hotswap.agent.javassist.NotFoundException;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.plugin.weld.command.BdaAgentRegistry;
 import org.hotswap.agent.plugin.weld.command.BeanClassRefreshCommand;
+import org.hotswap.agent.plugin.weld.transformer.AbstractClassBeanTransformer;
+import org.hotswap.agent.plugin.weld.transformer.BeanDeploymentArchiveTransformer;
+import org.hotswap.agent.plugin.weld.transformer.CdiContextsTransformer;
+import org.hotswap.agent.plugin.weld.transformer.ProxyFactoryTransformer;
+import org.hotswap.agent.util.AnnotationHelper;
 import org.hotswap.agent.util.IOUtils;
 import org.hotswap.agent.util.ReflectionHelper;
 import org.hotswap.agent.util.classloader.ClassLoaderHelper;
+import org.hotswap.agent.util.signature.ClassSignatureComparerHelper;
+import org.hotswap.agent.util.signature.ClassSignatureElement;
 import org.hotswap.agent.watch.WatchEventListener;
 import org.hotswap.agent.watch.WatchFileEvent;
 import org.hotswap.agent.watch.Watcher;
@@ -35,12 +60,15 @@ import org.hotswap.agent.watch.Watcher;
  */
 @Plugin(name = "Weld",
         description = "Weld framework(http://weld.cdi-spec.org/). Reload, reinject bean, redefine proxy class after bean class definition/redefinition.",
-        testedVersions = {"2.2.5-2.2.16, 2.3.x, 2.4.0"},
-        expectedVersions = {"All between 2.2.5 - 2.4.x"},
+        testedVersions = {"2.2.5-2.2.16, 2.3.x, 2.4.0, 3.0.x"},
+        expectedVersions = {"All between 2.2.5 - 3.0.x"},
         supportClass = {BeanDeploymentArchiveTransformer.class, ProxyFactoryTransformer.class, AbstractClassBeanTransformer.class, CdiContextsTransformer.class})
 public class WeldPlugin {
 
     private static AgentLogger LOGGER = AgentLogger.getLogger(WeldPlugin.class);
+
+    private static final String VETOED_ANNOTATION = "javax.enterprise.inject.Vetoed";
+    private static final String DS_EXCLUDED_ANNOTATION = "org.apache.deltaspike.core.api.exclude.Exclude";
 
     /** True for UnitTests */
     static boolean isTestEnvironment = false;
@@ -66,29 +94,37 @@ public class WeldPlugin {
     @Init
     PluginConfiguration pluginConfiguration;
 
-    boolean inJbossAS = false;
-
     boolean initialized = false;
 
-    private Map<Object, Object> registeredProxiedBeans = new WeakHashMap<Object, Object>();
+    private Map<Object, Object> registeredProxiedBeans = new WeakHashMap<>();
 
     private BeanReloadStrategy beanReloadStrategy;
 
     public void init() {
         if (!initialized) {
             LOGGER.info("CDI/Weld plugin initialized.");
-            initialized = true;
-            beanReloadStrategy = setBeanReloadStrategy(pluginConfiguration.getProperty("weld.beanReloadStrategy"));
+            doInit();
         }
     }
+
 
     public void initInJBossAS() {
         if (!initialized) {
             LOGGER.info("CDI/Weld plugin initialized in JBossAS.");
-            inJbossAS = true;
-            initialized = true;
-            beanReloadStrategy = setBeanReloadStrategy(pluginConfiguration.getProperty("weld.beanReloadStrategy"));
+            doInit();
         }
+    }
+
+    public void initInGlassFish() {
+        if (!initialized) {
+            LOGGER.info("CDI/Weld plugin initialized in GlassFish.");
+            doInit();
+        }
+    }
+
+    private void doInit() {
+        initialized = true;
+        beanReloadStrategy = setBeanReloadStrategy(pluginConfiguration.getProperty("weld.beanReloadStrategy"));
     }
 
     private BeanReloadStrategy setBeanReloadStrategy(String property) {
@@ -115,10 +151,10 @@ public class WeldPlugin {
             resource = resourceNameToURL(archivePath);
             URI uri = resource.toURI();
             if (!IOUtils.isDirectoryURL(uri.toURL())) {
-                LOGGER.trace("Weld - unable to watch files on URL '{}' for changes (JAR file?)", archivePath);
+                LOGGER.trace("Unable to watch for new files. Archive '{}' is not directory.", archivePath);
                 return;
             } else {
-                LOGGER.info("Registering archive path {}", archivePath);
+                LOGGER.info("Registering archive path '{}'", archivePath);
 
                 watcher.addEventListener(appClassLoader, uri, new WatchEventListener() {
                     @Override
@@ -135,7 +171,7 @@ public class WeldPlugin {
                             }
                             if (!ClassLoaderHelper.isClassLoaded(appClassLoader, className) || isTestEnvironment) {
                                 // refresh weld only for new classes
-                                LOGGER.trace("register reload command: {} ", className);
+                                LOGGER.trace("Register reload command: {} ", className);
                                 if (isBdaRegistered(appClassLoader, archivePath)) {
                                     // TODO : Create proxy factory
                                     scheduler.scheduleCommand(new BeanClassRefreshCommand(appClassLoader, archivePath, event), WAIT_ON_CREATE);
@@ -147,7 +183,7 @@ public class WeldPlugin {
             }
             LOGGER.info("Registered  watch for path '{}' for changes.", resource);
         } catch (URISyntaxException e) {
-            LOGGER.error("Unable to watch path '{}' for changes.", e, resource);
+            LOGGER.error("Unable to watch path '{}' for changes.", e, archivePath);
         } catch (Exception e) {
             LOGGER.warning("registerBeanDeplArchivePath() exception : {}",  e.getMessage());
         }
@@ -167,7 +203,7 @@ public class WeldPlugin {
     public void registerProxyFactory(Object proxyFactory, Object bean, ClassLoader classLoader, Class<?> proxiedBeanType) {
         synchronized(registeredProxiedBeans) {
             if (!registeredProxiedBeans.containsKey(bean)) {
-                LOGGER.debug("ProxyFactory for {} registered.", proxiedBeanType.getName());
+                LOGGER.debug("ProxyFactory for '{}' registered.", bean);
             }
             registeredProxiedBeans.put(bean, proxyFactory);
         }
@@ -182,19 +218,40 @@ public class WeldPlugin {
      */
     @OnClassLoadEvent(classNameRegexp = ".*", events = LoadEvent.REDEFINE)
     public void classReload(ClassLoader classLoader, CtClass ctClass, Class<?> original) {
-        if (original != null && !isSyntheticCdiClass(ctClass.getName()) && !isInnerNonPublicStaticClass(ctClass)) {
-            try {
-                String archivePath = getArchivePath(classLoader, ctClass, original.getName());
-                LOGGER.debug("Class {} redefined for archive {} ", original.getName(), archivePath);
-                if (isBdaRegistered(classLoader, archivePath)) {
-                    String oldSignatureForProxyCheck = WeldClassSignatureHelper.getSignatureForProxyClass(original);
-                    String oldSignatureByStrategy = WeldClassSignatureHelper.getSignatureByStrategy(beanReloadStrategy, original);
-                    scheduler.scheduleCommand(new BeanClassRefreshCommand(classLoader, archivePath, registeredProxiedBeans,
-                            original.getName(), oldSignatureForProxyCheck, oldSignatureByStrategy, beanReloadStrategy), WAIT_ON_REDEFINE);
-                }
-            } catch (Exception e) {
-                LOGGER.error("classReload() exception {}.", e, e.getMessage());
+        if (AnnotationHelper.hasAnnotation(ctClass, VETOED_ANNOTATION)) {
+            LOGGER.trace("Skipping @Vetoed class {}.", ctClass.getName());
+            return;
+        }
+
+        if (original == null || isSyntheticCdiClass(ctClass.getName()) || isInnerNonPublicStaticClass(ctClass)) {
+            if (original != null) {
+                LOGGER.trace("Skipping synthetic or inner class {}.", original.getName());
             }
+            return;
+        }
+
+        if (AnnotationHelper.hasAnnotation(ctClass, VETOED_ANNOTATION)) {
+            LOGGER.trace("Skipping @Vetoed class {}.", ctClass.getName());
+            return;
+        }
+
+        if (AnnotationHelper.hasAnnotation(ctClass, DS_EXCLUDED_ANNOTATION)) {
+            LOGGER.trace("Skipping @Excluded class {}.", ctClass.getName());
+            return;
+        }
+
+        try {
+            String archivePath = getArchivePath(classLoader, ctClass, original.getName());
+            if (isBdaRegistered(classLoader, archivePath)) {
+                LOGGER.debug("Class '{}' redefined for archive {} ", original.getName(), archivePath);
+                String oldSignatureForProxyCheck = WeldClassSignatureHelper.getSignatureForProxyClass(original);
+                String oldSignatureByStrategy = WeldClassSignatureHelper.getSignatureByStrategy(beanReloadStrategy, original);
+                String oldFullSignature = ClassSignatureComparerHelper.getJavaClassSignature(original, ClassSignatureElement.values());
+                scheduler.scheduleCommand(new BeanClassRefreshCommand(classLoader, archivePath, registeredProxiedBeans,
+                        original.getName(), oldFullSignature, oldSignatureForProxyCheck, oldSignatureByStrategy, beanReloadStrategy), WAIT_ON_REDEFINE);
+            }
+        } catch (Exception e) {
+            LOGGER.error("classReload() exception {}.", e, e.getMessage());
         }
     }
 
@@ -236,8 +293,7 @@ public class WeldPlugin {
     // Non static inner class is not allowed to be bean class
     private boolean isInnerNonPublicStaticClass(CtClass ctClass) {
         try {
-            CtClass declaringClass = ctClass.getDeclaringClass();
-            if (declaringClass != null && (
+            if (ctClass.isInnerClass() && (
                     (ctClass.getModifiers() & Modifier.STATIC) == 0 ||
                     (ctClass.getModifiers() & Modifier.PUBLIC) == 0)) {
                 return true;

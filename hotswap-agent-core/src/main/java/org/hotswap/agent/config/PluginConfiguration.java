@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.config;
 
 import java.io.File;
@@ -16,6 +34,7 @@ import java.util.regex.Pattern;
 import org.hotswap.agent.HotswapAgent;
 import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.logging.AgentLogger;
+import org.hotswap.agent.util.HotswapProperties;
 import org.hotswap.agent.util.classloader.HotswapAgentClassLoaderExt;
 import org.hotswap.agent.util.classloader.URLClassLoaderHelper;
 
@@ -34,7 +53,7 @@ public class PluginConfiguration {
     /** The Constant EXCLUDED_CLASS_LOADERS_KEY. */
     private static final String EXCLUDED_CLASS_LOADERS_KEY = "excludedClassLoaderPatterns";
 
-    Properties properties = new Properties();
+    Properties properties = new HotswapProperties();
 
     // if the property is not defined in this classloader, look for parent classloader and it's configuration
     PluginConfiguration parent;
@@ -95,9 +114,15 @@ public class PluginConfiguration {
             // search for resources not known by parent classloader (defined in THIS classloader exclusively)
             // this is necessary in case of parent classloader precedence
             try {
-                Enumeration<URL> urls = classLoader == null
-                        ? ClassLoader.getSystemResources(PLUGIN_CONFIGURATION)
-                        : classLoader.getResources(PLUGIN_CONFIGURATION);
+                Enumeration<URL> urls = null;
+
+                if (classLoader != null) {
+                    urls = classLoader.getResources(PLUGIN_CONFIGURATION);
+                }
+
+                if (urls == null) {
+                    urls = ClassLoader.getSystemResources(PLUGIN_CONFIGURATION);
+                }
 
                 while (urls.hasMoreElements()) {
                     URL url = urls.nextElement();
@@ -170,7 +195,7 @@ public class PluginConfiguration {
             if (classLoader instanceof URLClassLoader) {
                 URLClassLoaderHelper.prependClassPath((URLClassLoader) classLoader, extraClassPath);
             } else if (classLoader instanceof HotswapAgentClassLoaderExt) {
-                ((HotswapAgentClassLoaderExt) classLoader).setExtraClassPath(extraClassPath);
+                ((HotswapAgentClassLoaderExt) classLoader).$$ha$setExtraClassPath(extraClassPath);
             } else {
                 LOGGER.debug("Unable to set extraClasspath to {} on classLoader {}. " +
                         "Only URLClassLoader is supported.\n" +
@@ -181,10 +206,11 @@ public class PluginConfiguration {
 
     private void initExcludedClassLoaderPatterns() {
         if (properties != null && properties.containsKey(EXCLUDED_CLASS_LOADERS_KEY)) {
-            List<Pattern> excludedClassLoaderPatterns = new ArrayList<Pattern>();
+            List<Pattern> excludedClassLoaderPatterns = new ArrayList<>();
             for (String pattern : properties.getProperty(EXCLUDED_CLASS_LOADERS_KEY).split(",")) {
                 excludedClassLoaderPatterns.add(Pattern.compile(pattern));
             }
+            // FIXME: this is wrong since there is single HotswapTransformer versus multiple PluginConfigurations.
             PluginManager.getInstance().getHotswapTransformer()
                     .setExcludedClassLoaderPatterns(excludedClassLoaderPatterns);
         }
@@ -249,27 +275,28 @@ public class PluginConfiguration {
     }
 
     /**
+     * Converts watchResources property to URL array. Invalid URLs will be skipped and logged as error.
+     */
+    public String[] getBasePackagePrefixes() {
+        String basePackagePrefix = getProperty("spring.basePackagePrefix");
+        if (basePackagePrefix != null) {
+            return basePackagePrefix.split(",");
+        }
+        return null;
+    }
+
+    /**
      * Return configuration property webappDir as URL.
      */
-    public URL getWebappDir() {
-        try {
-            String webappDir = getProperty("webappDir");
-            if (webappDir != null && webappDir.length() > 0) {
-                return resourceNameToURL(webappDir);
-            } else {
-                return null;
-            }
-        } catch (Exception e) {
-            LOGGER.error("Invalid configuration value for webappDir: '{}' is not a valid URL or path and will be skipped.", getProperty("webappDir"), e);
-            return null;
-        }
+    public URL[] getWebappDir() {
+        return convertToURL(getProperty("webappDir"));
     }
 
     /**
      * List of disabled plugin names
      */
     public List<String> getDisabledPlugins() {
-        List<String> ret = new ArrayList<String>();
+        List<String> ret = new ArrayList<>();
         for (String disabledPlugin : getProperty("disabledPlugins", "").split(",")) {
             ret.add(disabledPlugin.trim());
         }
@@ -294,7 +321,7 @@ public class PluginConfiguration {
 
 
     private URL[] convertToURL(String resources) {
-        List<URL> ret = new ArrayList<URL>();
+        List<URL> ret = new ArrayList<>();
 
         if (resources != null) {
             StringTokenizer tokenizer = new StringTokenizer(resources, ",;");

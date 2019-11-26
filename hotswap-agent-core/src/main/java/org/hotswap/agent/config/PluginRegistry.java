@@ -1,14 +1,37 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.config;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.hotswap.agent.HotswapAgent;
 import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.annotation.handler.AnnotationProcessor;
 import org.hotswap.agent.logging.AgentLogger;
-import org.hotswap.agent.util.classloader.ClassLoaderPatcher;
+import org.hotswap.agent.util.classloader.ClassLoaderDefineClassPatcher;
 import org.hotswap.agent.util.scanner.ClassPathAnnotationScanner;
 import org.hotswap.agent.util.scanner.ClassPathScanner;
-
-import java.util.*;
 
 /**
  * Registry to support plugin manager.
@@ -49,16 +72,16 @@ public class PluginRegistry {
     }
 
     // copy plugin classes from application classloader to the agent classloader
-    private ClassLoaderPatcher classLoaderPatcher;
+    private ClassLoaderDefineClassPatcher classLoaderPatcher;
 
-    public void setClassLoaderPatcher(ClassLoaderPatcher classLoaderPatcher) {
+    public void setClassLoaderPatcher(ClassLoaderDefineClassPatcher classLoaderPatcher) {
         this.classLoaderPatcher = classLoaderPatcher;
     }
 
     /**
      * Create an instanec of plugin registry and initialize scanner and processor.
      */
-    public PluginRegistry(PluginManager pluginManager, ClassLoaderPatcher classLoaderPatcher) {
+    public PluginRegistry(PluginManager pluginManager, ClassLoaderDefineClassPatcher classLoaderPatcher) {
         this.pluginManager = pluginManager;
         this.classLoaderPatcher = classLoaderPatcher;
         annotationScanner = new ClassPathAnnotationScanner(Plugin.class.getName(), new ClassPathScanner());
@@ -77,7 +100,7 @@ public class PluginRegistry {
 
         try {
             List<String> discoveredPlugins = annotationScanner.scanPlugins(classLoader, pluginPath);
-            List<String> discoveredPluginNames = new ArrayList<String>();
+            List<String> discoveredPluginNames = new ArrayList<>();
 
             // Plugin class must be always defined directly in the agent classloader, otherwise it will not be available
             // to the instrumentation process. Copy the definition using patcher
@@ -148,13 +171,12 @@ public class PluginRegistry {
         }
 
         // already initialized in this or parent classloader
-        if (hasPlugin(clazz, appClassLoader, false)) {
+        if (doHasPlugin(clazz, appClassLoader, false, true)) {
             LOGGER.debug("Plugin {} already initialized in parent classloader of {}.", clazz, appClassLoader );
             return getPlugin(clazz, appClassLoader);
         }
 
-        Object pluginInstance = instantiate(clazz);
-        registeredPlugins.get(clazz).put(appClassLoader, pluginInstance);
+        Object pluginInstance = registeredPlugins.get(clazz).get(appClassLoader);
 
         if (annotationProcessor.processAnnotations(pluginInstance)) {
             LOGGER.info("Plugin '{}' initialized in ClassLoader '{}'.", pluginClass, appClassLoader);
@@ -164,6 +186,15 @@ public class PluginRegistry {
         }
 
         return pluginInstance;
+    }
+
+    public void initializePluginInstance(Object pluginInstance) {
+        registeredPlugins.put(pluginInstance.getClass(),
+                Collections.singletonMap(pluginInstance.getClass().getClassLoader(), pluginInstance));
+        if (!annotationProcessor.processAnnotations(pluginInstance)) {
+            throw new IllegalStateException("Unable to initialize plugin");
+        }
+
     }
 
     /**
@@ -185,10 +216,13 @@ public class PluginRegistry {
         if (!registeredPlugins.containsKey(pluginClass))
             throw new IllegalArgumentException(String.format("Plugin %s is not known to the registry.", pluginClass));
 
-        for (Map.Entry<ClassLoader, Object> registeredClassLoaderEntry : registeredPlugins.get(pluginClass).entrySet()) {
-            if (isParentClassLoader(registeredClassLoaderEntry.getKey(), classLoader)) {
-                //noinspection unchecked
-                return (T) registeredClassLoaderEntry.getValue();
+        Map<ClassLoader, Object> pluginInstances = registeredPlugins.get(pluginClass);
+        synchronized(pluginInstances) {
+            for (Map.Entry<ClassLoader, Object> registeredClassLoaderEntry : pluginInstances.entrySet()) {
+                if (isParentClassLoader(registeredClassLoaderEntry.getKey(), classLoader)) {
+                    //noinspection unchecked
+                    return (T) registeredClassLoaderEntry.getValue();
+                }
             }
         }
 
@@ -205,14 +239,25 @@ public class PluginRegistry {
      * @return true/false
      */
     public boolean hasPlugin(Class<?> pluginClass, ClassLoader classLoader, boolean checkParent) {
+        return doHasPlugin(pluginClass, classLoader,checkParent, false);
+    }
+
+    public boolean doHasPlugin(Class<?> pluginClass, ClassLoader classLoader, boolean checkParent, boolean createIfMissing) {
         if (!registeredPlugins.containsKey(pluginClass))
             return false;
 
-        for (Map.Entry<ClassLoader, Object> registeredClassLoaderEntry : registeredPlugins.get(pluginClass).entrySet()) {
-            if (checkParent && isParentClassLoader(registeredClassLoaderEntry.getKey(), classLoader)) {
-                return true;
-            } else if (registeredClassLoaderEntry.getKey().equals(classLoader)) {
-                return true;
+        Map<ClassLoader, Object> pluginInstances = registeredPlugins.get(pluginClass);
+        synchronized (pluginInstances) {
+            for (Map.Entry<ClassLoader, Object> registeredClassLoaderEntry : pluginInstances.entrySet()) {
+                if (checkParent && isParentClassLoader(registeredClassLoaderEntry.getKey(), classLoader)) {
+                    return true;
+                } else if (registeredClassLoaderEntry.getKey().equals(classLoader)) {
+                    return true;
+                }
+            }
+            if (createIfMissing) {
+                Object pluginInstance = instantiate((Class<Object>) pluginClass);
+                pluginInstances.put(classLoader, pluginInstance);
             }
         }
         return false;
@@ -226,13 +271,16 @@ public class PluginRegistry {
      */
     public ClassLoader getAppClassLoader(Object plugin) {
         // search with for loop. Maybe performance improvement to create reverse map if this is used heavily
-        for (Map<ClassLoader, Object> plugins : registeredPlugins.values()) {
-            for (Map.Entry<ClassLoader, Object> entry : plugins.entrySet()) {
-                if (entry.getValue().equals(plugin))
-                    return entry.getKey();
+        Class<Object> clazz = getPluginClass(plugin.getClass().getName());
+        Map<ClassLoader, Object> pluginInstances = registeredPlugins.get(clazz);
+        if (pluginInstances != null) {
+            synchronized(pluginInstances) {
+                for (Map.Entry<ClassLoader, Object> entry : pluginInstances.entrySet()) {
+                    if (entry.getValue().equals(plugin))
+                        return entry.getKey();
+                }
             }
         }
-
         throw new IllegalArgumentException("Plugin not found in the registry " + plugin);
     }
 
@@ -281,8 +329,11 @@ public class PluginRegistry {
      * @param classLoader classloader to cleanup
      */
     public void closeClassLoader(ClassLoader classLoader) {
-        for (Map<ClassLoader, Object> plugins : registeredPlugins.values()) {
-            plugins.remove(classLoader);
+        LOGGER.debug("Closing classloader {}.", classLoader);
+        synchronized (registeredPlugins) {
+            for (Map<ClassLoader, Object> plugins : registeredPlugins.values()) {
+                plugins.remove(classLoader);
+            }
         }
     }
 }

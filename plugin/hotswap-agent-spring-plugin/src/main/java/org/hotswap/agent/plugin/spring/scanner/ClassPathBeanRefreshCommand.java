@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.spring.scanner;
 
 import org.hotswap.agent.annotation.FileEvent;
@@ -30,6 +48,10 @@ public class ClassPathBeanRefreshCommand extends MergeableCommand {
     WatchFileEvent event;
     byte[] classDefinition;
 
+    public ClassPathBeanRefreshCommand() {
+
+    }
+
     public ClassPathBeanRefreshCommand(ClassLoader appClassLoader, String basePackage, String className, byte[] classDefinition) {
         this.appClassLoader = appClassLoader;
         this.basePackage = basePackage;
@@ -37,16 +59,11 @@ public class ClassPathBeanRefreshCommand extends MergeableCommand {
         this.classDefinition = classDefinition;
     }
 
-    public ClassPathBeanRefreshCommand(ClassLoader appClassLoader, String basePackage, WatchFileEvent event) {
+    public ClassPathBeanRefreshCommand(ClassLoader appClassLoader, String basePackage, String className, WatchFileEvent event) {
         this.appClassLoader = appClassLoader;
         this.basePackage = basePackage;
         this.event = event;
-
-        // strip from URI prefix up to basePackage and .class suffix.
-        String path = event.getURI().getPath();
-        path = path.substring(path.indexOf(basePackage.replace(".", "/")));
-        path = path.substring(0, path.indexOf(".class"));
-        this.className = path;
+        this.className = className;
     }
 
     @Override
@@ -68,7 +85,7 @@ public class ClassPathBeanRefreshCommand extends MergeableCommand {
 
             LOGGER.debug("Executing ClassPathBeanDefinitionScannerAgent.refreshClass('{}')", className);
 
-            Class<?> clazz = appClassLoader.loadClass(ClassPathBeanDefinitionScannerAgent.class.getName());
+            Class<?> clazz = Class.forName("org.hotswap.agent.plugin.spring.scanner.ClassPathBeanDefinitionScannerAgent", true, appClassLoader);
             Method method  = clazz.getDeclaredMethod(
                     "refreshClass", new Class[] {String.class, byte[].class});
             method.invoke(null, basePackage, classDefinition);
@@ -90,7 +107,7 @@ public class ClassPathBeanRefreshCommand extends MergeableCommand {
      */
     private boolean isDeleteEvent() {
         // for all merged commands including this command
-        List<ClassPathBeanRefreshCommand> mergedCommands = new ArrayList<ClassPathBeanRefreshCommand>();
+        List<ClassPathBeanRefreshCommand> mergedCommands = new ArrayList<>();
         for (Command command : getMergedCommands()) {
             mergedCommands.add((ClassPathBeanRefreshCommand) command);
         }

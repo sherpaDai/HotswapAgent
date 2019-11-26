@@ -25,7 +25,16 @@ import java.util.List;
 /**
  * <code>field_info</code> structure.
  *
- * @see org.hotswap.agent.javassist.CtField#getFieldInfo()
+ * <p>The following code adds a public field <code>width</code>
+ * of <code>int</code> type:
+ * <blockquote><pre>
+ * ClassFile cf = ...
+ * FieldInfo f = new FieldInfo(cf.getConstPool(), "width", "I");
+ * f.setAccessFlags(AccessFlag.PUBLIC);
+ * cf.addField(f);
+ * </pre></blockquote>
+ *
+ * @see javassist.CtField#getFieldInfo()
  */
 public final class FieldInfo {
     ConstPool constPool;
@@ -34,7 +43,7 @@ public final class FieldInfo {
     String cachedName;
     String cachedType;
     int descriptor;
-    ArrayList attribute;       // may be null.
+    List<AttributeInfo> attribute;       // may be null.
 
     private FieldInfo(ConstPool cp) {
         constPool = cp;
@@ -45,9 +54,10 @@ public final class FieldInfo {
     /**
      * Constructs a <code>field_info</code> structure.
      *
-     * @param cp        a constant pool table
-     * @param fieldName field name
-     * @param desc      field descriptor
+     * @param cp                a constant pool table
+     * @param fieldName         field name
+     * @param desc              field descriptor
+     *
      * @see Descriptor
      */
     public FieldInfo(ConstPool cp, String fieldName, String desc) {
@@ -65,6 +75,7 @@ public final class FieldInfo {
     /**
      * Returns a string representation of the object.
      */
+    @Override
     public String toString() {
         return getName() + " " + getDescriptor();
     }
@@ -75,7 +86,7 @@ public final class FieldInfo {
      * This is used for garbage collecting the items of removed fields
      * and methods.
      *
-     * @param cp the destination
+     * @param cp    the destination
      */
     void compact(ConstPool cp) {
         name = cp.addUtf8Info(getName());
@@ -85,23 +96,23 @@ public final class FieldInfo {
     }
 
     void prune(ConstPool cp) {
-        ArrayList newAttributes = new ArrayList();
+        List<AttributeInfo> newAttributes = new ArrayList<AttributeInfo>();
         AttributeInfo invisibleAnnotations
-                = getAttribute(AnnotationsAttribute.invisibleTag);
+            = getAttribute(AnnotationsAttribute.invisibleTag);
         if (invisibleAnnotations != null) {
             invisibleAnnotations = invisibleAnnotations.copy(cp, null);
             newAttributes.add(invisibleAnnotations);
-        }
+         }
 
         AttributeInfo visibleAnnotations
-                = getAttribute(AnnotationsAttribute.visibleTag);
+            = getAttribute(AnnotationsAttribute.visibleTag);
         if (visibleAnnotations != null) {
             visibleAnnotations = visibleAnnotations.copy(cp, null);
             newAttributes.add(visibleAnnotations);
         }
 
         AttributeInfo signature
-                = getAttribute(SignatureAttribute.tag);
+            = getAttribute(SignatureAttribute.tag);
         if (signature != null) {
             signature = signature.copy(cp, null);
             newAttributes.add(signature);
@@ -131,10 +142,10 @@ public final class FieldInfo {
      * Returns the field name.
      */
     public String getName() {
-        if (cachedName == null)
-            cachedName = constPool.getUtf8Info(name);
+       if (cachedName == null)
+           cachedName = constPool.getUtf8Info(name);
 
-        return cachedName;
+       return cachedName;
     }
 
     /**
@@ -148,7 +159,7 @@ public final class FieldInfo {
     /**
      * Returns the access flags.
      *
-     * @see org.hotswap.agent.javassist.bytecode.AccessFlag
+     * @see AccessFlag
      */
     public int getAccessFlags() {
         return accessFlags;
@@ -157,7 +168,7 @@ public final class FieldInfo {
     /**
      * Sets the access flags.
      *
-     * @see org.hotswap.agent.javassist.bytecode.AccessFlag
+     * @see AccessFlag
      */
     public void setAccessFlags(int acc) {
         accessFlags = acc;
@@ -189,15 +200,14 @@ public final class FieldInfo {
      * @return 0    if a ConstantValue attribute is not found.
      */
     public int getConstantValue() {
-        if ((accessFlags & org.hotswap.agent.javassist.bytecode.AccessFlag.STATIC) == 0)
+        if ((accessFlags & AccessFlag.STATIC) == 0)
             return 0;
 
         ConstantAttribute attr
-                = (ConstantAttribute) getAttribute(ConstantAttribute.tag);
+            = (ConstantAttribute)getAttribute(ConstantAttribute.tag);
         if (attr == null)
             return 0;
-        else
-            return attr.getConstantValue();
+        return attr.getConstantValue();
     }
 
     /**
@@ -210,9 +220,9 @@ public final class FieldInfo {
      * @return a list of <code>AttributeInfo</code> objects.
      * @see AttributeInfo
      */
-    public List getAttributes() {
+    public List<AttributeInfo> getAttributes() {
         if (attribute == null)
-            attribute = new ArrayList();
+            attribute = new ArrayList<AttributeInfo>();
 
         return attribute;
     }
@@ -221,11 +231,27 @@ public final class FieldInfo {
      * Returns the attribute with the specified name.
      * It returns null if the specified attribute is not found.
      *
-     * @param name attribute name
+     * <p>An attribute name can be obtained by, for example,
+     * {@link AnnotationsAttribute#visibleTag} or
+     * {@link AnnotationsAttribute#invisibleTag}. 
+     * </p>
+     * 
+     * @param name      attribute name
      * @see #getAttributes()
      */
     public AttributeInfo getAttribute(String name) {
         return AttributeInfo.lookup(attribute, name);
+    }
+
+    /**
+     * Removes an attribute with the specified name.
+     *
+     * @param name      attribute name.
+     * @return          the removed attribute or null.
+     * @since 3.21
+     */
+    public AttributeInfo removeAttribute(String name) {
+        return AttributeInfo.remove(attribute, name);
     }
 
     /**
@@ -236,7 +262,7 @@ public final class FieldInfo {
      */
     public void addAttribute(AttributeInfo info) {
         if (attribute == null)
-            attribute = new ArrayList();
+            attribute = new ArrayList<AttributeInfo>();
 
         AttributeInfo.remove(attribute, info.getName());
         attribute.add(info);
@@ -247,7 +273,7 @@ public final class FieldInfo {
         name = in.readUnsignedShort();
         descriptor = in.readUnsignedShort();
         int n = in.readUnsignedShort();
-        attribute = new ArrayList();
+        attribute = new ArrayList<AttributeInfo>();
         for (int i = 0; i < n; ++i)
             attribute.add(AttributeInfo.read(constPool, in));
     }

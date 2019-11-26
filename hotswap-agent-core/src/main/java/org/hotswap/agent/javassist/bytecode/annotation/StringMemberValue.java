@@ -16,10 +16,11 @@
 
 package org.hotswap.agent.javassist.bytecode.annotation;
 
-import org.hotswap.agent.javassist.bytecode.ConstPool;
-
 import java.io.IOException;
 import java.lang.reflect.Method;
+
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
 
 /**
  * String constant value.
@@ -34,7 +35,7 @@ public class StringMemberValue extends MemberValue {
      * Constructs a string constant value.  The initial value is specified
      * by the constant pool entry at the given index.
      *
-     * @param index the index of a CONSTANT_Utf8_info structure.
+     * @param index     the index of a CONSTANT_Utf8_info structure.
      */
     public StringMemberValue(int index, ConstPool cp) {
         super('s', cp);
@@ -44,7 +45,7 @@ public class StringMemberValue extends MemberValue {
     /**
      * Constructs a string constant value.
      *
-     * @param str the initial value.
+     * @param str         the initial value.
      */
     public StringMemberValue(String str, ConstPool cp) {
         super('s', cp);
@@ -59,11 +60,13 @@ public class StringMemberValue extends MemberValue {
         setValue("");
     }
 
-    Object getValue(ClassLoader cl, org.hotswap.agent.javassist.ClassPool cp, Method m) {
+    @Override
+    Object getValue(ClassLoader cl, ClassPool cp, Method m) {
         return getValue();
     }
 
-    Class getType(ClassLoader cl) {
+    @Override
+    Class<?> getType(ClassLoader cl) {
         return String.class;
     }
 
@@ -84,6 +87,7 @@ public class StringMemberValue extends MemberValue {
     /**
      * Obtains the string representation of this object.
      */
+    @Override
     public String toString() {
         return "\"" + getValue() + "\"";
     }
@@ -91,6 +95,7 @@ public class StringMemberValue extends MemberValue {
     /**
      * Writes the value.
      */
+    @Override
     public void write(AnnotationsWriter writer) throws IOException {
         writer.constValueIndex(getValue());
     }
@@ -98,7 +103,8 @@ public class StringMemberValue extends MemberValue {
     /**
      * Accepts a visitor.
      */
-    public void accept(org.hotswap.agent.javassist.bytecode.annotation.MemberValueVisitor visitor) {
+    @Override
+    public void accept(MemberValueVisitor visitor) {
         visitor.visitStringMemberValue(this);
     }
 }

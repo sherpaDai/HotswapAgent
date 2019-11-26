@@ -16,10 +16,29 @@
 
 package org.hotswap.agent.javassist.expr;
 
+import org.hotswap.agent.javassist.CannotCompileException;
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.CtBehavior;
+import org.hotswap.agent.javassist.CtClass;
+import org.hotswap.agent.javassist.CtConstructor;
+import org.hotswap.agent.javassist.NotFoundException;
+import org.hotswap.agent.javassist.bytecode.BadBytecode;
+import org.hotswap.agent.javassist.bytecode.Bytecode;
+import org.hotswap.agent.javassist.bytecode.CodeAttribute;
+import org.hotswap.agent.javassist.bytecode.CodeIterator;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
+import org.hotswap.agent.javassist.bytecode.Descriptor;
+import org.hotswap.agent.javassist.bytecode.MethodInfo;
+import org.hotswap.agent.javassist.bytecode.Opcode;
+import org.hotswap.agent.javassist.compiler.CompileError;
+import org.hotswap.agent.javassist.compiler.Javac;
+import org.hotswap.agent.javassist.compiler.JvstCodeGen;
+import org.hotswap.agent.javassist.compiler.JvstTypeChecker;
+import org.hotswap.agent.javassist.compiler.ProceedHandler;
 import org.hotswap.agent.javassist.compiler.ast.ASTList;
 
 /**
- * Object creation (<tt>new</tt> expression).
+ * Object creation (<code>new</code> expression).
  */
 public class NewExpr extends Expr {
     String newTypeName;
@@ -28,8 +47,8 @@ public class NewExpr extends Expr {
     /**
      * Undocumented constructor.  Do not use; internal-use only.
      */
-    protected NewExpr(int pos, org.hotswap.agent.javassist.bytecode.CodeIterator i, org.hotswap.agent.javassist.CtClass declaring,
-                      org.hotswap.agent.javassist.bytecode.MethodInfo m, String type, int np) {
+    protected NewExpr(int pos, CodeIterator i, CtClass declaring,
+                      MethodInfo m, String type, int np) {
         super(pos, i, declaring, m);
         newTypeName = type;
         newPos = np;
@@ -50,28 +69,29 @@ public class NewExpr extends Expr {
     } */
 
     /**
-     * Returns the method or constructor containing the <tt>new</tt>
+     * Returns the method or constructor containing the <code>new</code>
      * expression represented by this object.
      */
-    public org.hotswap.agent.javassist.CtBehavior where() {
-        return super.where();
-    }
+    @Override
+    public CtBehavior where() { return super.where(); }
 
     /**
      * Returns the line number of the source line containing the
-     * <tt>new</tt> expression.
+     * <code>new</code> expression.
      *
      * @return -1       if this information is not available.
      */
+    @Override
     public int getLineNumber() {
         return super.getLineNumber();
     }
 
     /**
-     * Returns the source file containing the <tt>new</tt> expression.
+     * Returns the source file containing the <code>new</code> expression.
      *
      * @return null     if this information is not available.
      */
+    @Override
     public String getFileName() {
         return super.getFileName();
     }
@@ -79,7 +99,7 @@ public class NewExpr extends Expr {
     /**
      * Returns the class of the created object.
      */
-    private org.hotswap.agent.javassist.CtClass getCtClass() throws org.hotswap.agent.javassist.NotFoundException {
+    private CtClass getCtClass() throws NotFoundException {
         return thisClass.getClassPool().get(newTypeName);
     }
 
@@ -92,16 +112,16 @@ public class NewExpr extends Expr {
 
     /**
      * Get the signature of the constructor
-     * <p/>
+     *
      * The signature is represented by a character string
      * called method descriptor, which is defined in the JVM specification.
      *
+     * @see javassist.CtBehavior#getSignature()
+     * @see javassist.bytecode.Descriptor
      * @return the signature
-     * @see org.hotswap.agent.javassist.CtBehavior#getSignature()
-     * @see org.hotswap.agent.javassist.bytecode.Descriptor
      */
     public String getSignature() {
-        org.hotswap.agent.javassist.bytecode.ConstPool constPool = getConstPool();
+        ConstPool constPool = getConstPool();
         int methodIndex = iterator.u16bitAt(currentPos + 1);   // constructor
         return constPool.getMethodrefType(methodIndex);
     }
@@ -109,8 +129,8 @@ public class NewExpr extends Expr {
     /**
      * Returns the constructor called for creating the object.
      */
-    public org.hotswap.agent.javassist.CtConstructor getConstructor() throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.bytecode.ConstPool cp = getConstPool();
+    public CtConstructor getConstructor() throws NotFoundException {
+        ConstPool cp = getConstPool();
         int index = iterator.u16bitAt(currentPos + 1);
         String desc = cp.getMethodrefType(index);
         return getCtClass().getConstructor(desc);
@@ -122,7 +142,8 @@ public class NewExpr extends Expr {
      * including the expression can catch and the exceptions that
      * the throws declaration allows the method to throw.
      */
-    public org.hotswap.agent.javassist.CtClass[] mayThrow() {
+    @Override
+    public CtClass[] mayThrow() {
         return super.mayThrow();
     }
 
@@ -137,28 +158,30 @@ public class NewExpr extends Expr {
     }
     */
 
-    private int canReplace() throws org.hotswap.agent.javassist.CannotCompileException {
+    private int canReplace() throws CannotCompileException {
         int op = iterator.byteAt(newPos + 3);
-        if (op == DUP)
-            return 4;
-        else if (op == DUP_X1
-                && iterator.byteAt(newPos + 4) == SWAP)
+        if (op == Opcode.DUP)     // Typical single DUP or Javaflow DUP DUP2_X2 POP2
+            return ((iterator.byteAt(newPos + 4) == Opcode.DUP2_X2
+                 && iterator.byteAt(newPos + 5) == Opcode.POP2)) ? 6 : 4;
+        else if (op == Opcode.DUP_X1
+                 && iterator.byteAt(newPos + 4) == Opcode.SWAP)
             return 5;
         else
             return 3;   // for Eclipse.  The generated code may include no DUP.
-        // throw new CannotCompileException(
-        //            "sorry, cannot edit NEW followed by no DUP");
+            // throw new CannotCompileException(
+            //            "sorry, cannot edit NEW followed by no DUP");
     }
 
     /**
-     * Replaces the <tt>new</tt> expression with the bytecode derived from
+     * Replaces the <code>new</code> expression with the bytecode derived from
      * the given source text.
-     * <p/>
+     *
      * <p>$0 is available but the value is null.
      *
-     * @param statement a Java statement except try-catch.
+     * @param statement         a Java statement except try-catch.
      */
-    public void replace(String statement) throws org.hotswap.agent.javassist.CannotCompileException {
+    @Override
+    public void replace(String statement) throws CannotCompileException {
         thisClass.getClassFile();   // to call checkModify().
 
         final int bytecodeSize = 3;
@@ -173,30 +196,30 @@ public class NewExpr extends Expr {
         for (int i = pos; i < end; ++i)
             iterator.writeByte(NOP, i);
 
-        org.hotswap.agent.javassist.bytecode.ConstPool constPool = getConstPool();
+        ConstPool constPool = getConstPool();
         pos = currentPos;
         int methodIndex = iterator.u16bitAt(pos + 1);   // constructor
 
         String signature = constPool.getMethodrefType(methodIndex);
 
-        org.hotswap.agent.javassist.compiler.Javac jc = new org.hotswap.agent.javassist.compiler.Javac(thisClass);
-        org.hotswap.agent.javassist.ClassPool cp = thisClass.getClassPool();
-        org.hotswap.agent.javassist.bytecode.CodeAttribute ca = iterator.get();
+        Javac jc = new Javac(thisClass);
+        ClassPool cp = thisClass.getClassPool();
+        CodeAttribute ca = iterator.get();
         try {
-            org.hotswap.agent.javassist.CtClass[] params = org.hotswap.agent.javassist.bytecode.Descriptor.getParameterTypes(signature, cp);
-            org.hotswap.agent.javassist.CtClass newType = cp.get(newTypeName);
+            CtClass[] params = Descriptor.getParameterTypes(signature, cp);
+            CtClass newType = cp.get(newTypeName);
             int paramVar = ca.getMaxLocals();
             jc.recordParams(newTypeName, params,
-                    true, paramVar, withinStatic());
+                            true, paramVar, withinStatic());
             int retVar = jc.recordReturnType(newType, true);
             jc.recordProceed(new ProceedForNew(newType, newIndex,
-                    methodIndex));
+                                               methodIndex));
 
             /* Is $_ included in the source code?
              */
             checkResultValue(newType, statement);
 
-            org.hotswap.agent.javassist.bytecode.Bytecode bytecode = jc.getBytecode();
+            Bytecode bytecode = jc.getBytecode();
             storeStack(params, true, paramVar, bytecode);
             jc.recordLocalVariables(ca, pos);
 
@@ -208,38 +231,41 @@ public class NewExpr extends Expr {
                 bytecode.addAload(retVar);
 
             replace0(pos, bytecode, bytecodeSize);
-        } catch (org.hotswap.agent.javassist.compiler.CompileError e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
-        } catch (org.hotswap.agent.javassist.bytecode.BadBytecode e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException("broken method");
+        }
+        catch (CompileError e) { throw new CannotCompileException(e); }
+        catch (NotFoundException e) { throw new CannotCompileException(e); }
+        catch (BadBytecode e) {
+            throw new CannotCompileException("broken method");
         }
     }
 
-    static class ProceedForNew implements org.hotswap.agent.javassist.compiler.ProceedHandler {
-        org.hotswap.agent.javassist.CtClass newType;
+    static class ProceedForNew implements ProceedHandler {
+        CtClass newType;
         int newIndex, methodIndex;
 
-        ProceedForNew(org.hotswap.agent.javassist.CtClass nt, int ni, int mi) {
+        ProceedForNew(CtClass nt, int ni, int mi) {
             newType = nt;
             newIndex = ni;
             methodIndex = mi;
         }
 
-        public void doit(org.hotswap.agent.javassist.compiler.JvstCodeGen gen, org.hotswap.agent.javassist.bytecode.Bytecode bytecode, ASTList args)
-                throws org.hotswap.agent.javassist.compiler.CompileError {
+        @Override
+        public void doit(JvstCodeGen gen, Bytecode bytecode, ASTList args)
+            throws CompileError
+        {
             bytecode.addOpcode(NEW);
             bytecode.addIndex(newIndex);
             bytecode.addOpcode(DUP);
-            gen.atMethodCallCore(newType, org.hotswap.agent.javassist.bytecode.MethodInfo.nameInit, args,
-                    false, true, -1, null);
+            gen.atMethodCallCore(newType, MethodInfo.nameInit, args,
+                                 false, true, -1, null);
             gen.setType(newType);
         }
 
-        public void setReturnType(org.hotswap.agent.javassist.compiler.JvstTypeChecker c, ASTList args)
-                throws org.hotswap.agent.javassist.compiler.CompileError {
-            c.atMethodCallCore(newType, org.hotswap.agent.javassist.bytecode.MethodInfo.nameInit, args);
+        @Override
+        public void setReturnType(JvstTypeChecker c, ASTList args)
+            throws CompileError
+        {
+            c.atMethodCallCore(newType, MethodInfo.nameInit, args);
             c.setType(newType);
         }
     }

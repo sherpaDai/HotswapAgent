@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.util.signature;
 
 import java.lang.reflect.Modifier;
@@ -42,6 +60,8 @@ public class CtClassSignature extends ClassSignatureBase {
                     continue;
                 if (!useStaticMethod && Modifier.isStatic(method.getModifiers()))
                     continue;
+                if (method.getName().startsWith(SWITCH_TABLE_METHOD_PREFIX))
+                    continue;
                 strings.add(getMethodString(method));
             }
         }
@@ -66,8 +86,9 @@ public class CtClassSignature extends ClassSignatureBase {
         }
 
         if (hasElement(ClassSignatureElement.SUPER_CLASS)) {
-            if (ctClass.getSuperclass() != null && !ctClass.getSuperclass().getName().equals(Object.class.getName()))
-                strings.add(ctClass.getSuperclass().getName());
+            String superclassName = ctClass.getSuperclassName();
+            if (superclassName != null && !superclassName.equals(Object.class.getName()))
+                strings.add(superclassName);
         }
 
         if (hasElement(ClassSignatureElement.FIELD)) {
@@ -75,6 +96,8 @@ public class CtClassSignature extends ClassSignatureBase {
             boolean useFieldAnnotation = hasElement(ClassSignatureElement.FIELD_ANNOTATION);
             for (CtField field : ctClass.getDeclaredFields()) {
                 if (!useStaticField && Modifier.isStatic(field.getModifiers()))
+                    continue;
+                if (field.getName().startsWith(SWITCH_TABLE_METHOD_PREFIX))
                     continue;
                 String fieldSignature = field.getType().getName() + " " + field.getName();
                 if (useFieldAnnotation) {
@@ -159,7 +182,6 @@ public class CtClassSignature extends ClassSignatureBase {
     }
 
     private CtClass[] sort(CtClass[] a) {
-
         a = Arrays.copyOf(a, a.length);
         Arrays.sort(a, CtClassComparator.INSTANCE);
         return a;

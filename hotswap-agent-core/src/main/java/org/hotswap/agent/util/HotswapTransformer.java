@@ -1,9 +1,29 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.util;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -31,25 +51,32 @@ public class HotswapTransformer implements ClassFileTransformer {
 
     private static AgentLogger LOGGER = AgentLogger.getLogger(HotswapTransformer.class);
 
-
     /**
      * Exclude these classLoaders from initialization (system classloaders). Note that
      */
-    private static final Set<String> excludedClassLoaders = new HashSet<String>(Arrays.asList(
+    private static final Set<String> skippedClassLoaders = new HashSet<>(Arrays.asList(
+            "jdk.internal.reflect.DelegatingClassLoader",
             "sun.reflect.DelegatingClassLoader"
+    ));
+
+    // TODO : check if felix class loaders could be skipped
+    private static final Set<String> excludedClassLoaders = new HashSet<>(Arrays.asList(
+            "org.apache.felix.framework.BundleWiringImpl$BundleClassLoader", // delegating ClassLoader in GlassFish
+            "org.apache.felix.framework.BundleWiringImpl$BundleClassLoaderJava5" // delegating ClassLoader in_GlassFish
     ));
 
     private static class RegisteredTransformersRecord {
         Pattern pattern;
-        List<ClassFileTransformer> transformerList = new LinkedList<ClassFileTransformer>();
+        List<HaClassFileTransformer> transformerList = new LinkedList<>();
     }
 
-    protected Map<String, RegisteredTransformersRecord> registeredTransformers = new LinkedHashMap<String, RegisteredTransformersRecord>();
+    protected Map<String, RegisteredTransformersRecord> redefinitionTransformers = new LinkedHashMap<>();
+    protected Map<String, RegisteredTransformersRecord> otherTransformers = new LinkedHashMap<>();
 
     // keep track about which classloader requested which transformer
-    protected Map<ClassFileTransformer, ClassLoader> classLoaderTransformers = new LinkedHashMap<ClassFileTransformer, ClassLoader>();
+    protected Map<ClassFileTransformer, ClassLoader> classLoaderTransformers = new LinkedHashMap<>();
 
-    protected Map<ClassLoader, Object> seenClassLoaders = new WeakHashMap<ClassLoader, Object>();
+    protected Map<ClassLoader, Object> seenClassLoaders = new WeakHashMap<>();
 
     private List<Pattern> excludedClassLoaderPatterns;
 
@@ -72,15 +99,18 @@ public class HotswapTransformer implements ClassFileTransformer {
      *                        (diffentence between java/lang/String and java.lang.String).
      * @param transformer     the transformer to be called for each class matching regexp.
      */
-    public void registerTransformer(ClassLoader classLoader, String classNameRegexp, ClassFileTransformer transformer) {
+    public void registerTransformer(ClassLoader classLoader, String classNameRegexp, HaClassFileTransformer transformer) {
         LOGGER.debug("Registering transformer for class regexp '{}'.", classNameRegexp);
 
         String normalizeRegexp = normalizeTypeRegexp(classNameRegexp);
-        RegisteredTransformersRecord transformerRecord = registeredTransformers.get(normalizeRegexp);
+
+        Map<String, RegisteredTransformersRecord> transformersMap = getTransformerMap(transformer);
+
+        RegisteredTransformersRecord transformerRecord = transformersMap.get(normalizeRegexp);
         if (transformerRecord == null) {
             transformerRecord = new RegisteredTransformersRecord();
             transformerRecord.pattern = Pattern.compile(normalizeRegexp);
-            registeredTransformers.put(normalizeRegexp, transformerRecord);
+            transformersMap.put(normalizeRegexp, transformerRecord);
         }
         transformerRecord.transformerList.add(transformer);
 
@@ -90,15 +120,23 @@ public class HotswapTransformer implements ClassFileTransformer {
         }
     }
 
+    private Map<String, RegisteredTransformersRecord> getTransformerMap(HaClassFileTransformer transformer) {
+        if (transformer.isForRedefinitionOnly()) {
+            return redefinitionTransformers;
+        }
+        return otherTransformers;
+    }
+
     /**
      * Remove registered transformer.
      *
      * @param classNameRegexp regexp to match fully qualified class name.
      * @param transformer     currently registered transformer
      */
-    public void removeTransformer(String classNameRegexp, ClassFileTransformer transformer) {
+    public void removeTransformer(String classNameRegexp, HaClassFileTransformer transformer) {
         String normalizeRegexp = normalizeTypeRegexp(classNameRegexp);
-        RegisteredTransformersRecord transformerRecord = registeredTransformers.get(normalizeRegexp);
+        Map<String, RegisteredTransformersRecord> transformersMap = getTransformerMap(transformer);
+        RegisteredTransformersRecord transformerRecord = transformersMap.get(normalizeRegexp);
         if (transformerRecord != null) {
             transformerRecord.transformerList.remove(transformer);
         }
@@ -114,8 +152,12 @@ public class HotswapTransformer implements ClassFileTransformer {
             Map.Entry<ClassFileTransformer, ClassLoader> entry = entryIterator.next();
             if (entry.getValue().equals(classLoader)) {
                 entryIterator.remove();
-                for (RegisteredTransformersRecord transformerRecord : registeredTransformers.values())
+                for (RegisteredTransformersRecord transformerRecord : redefinitionTransformers.values()) {
                     transformerRecord.transformerList.remove(entry.getKey());
+                }
+                for (RegisteredTransformersRecord transformerRecord : otherTransformers.values()) {
+                    transformerRecord.transformerList.remove(entry.getKey());
+                }
             }
         }
 
@@ -135,17 +177,23 @@ public class HotswapTransformer implements ClassFileTransformer {
     @Override
     public byte[] transform(final ClassLoader classLoader, String className, Class<?> redefiningClass,
                             final ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
+
+        // Skip delegating classloaders used for reflection
+        String classLoaderClassName = classLoader != null ? classLoader.getClass().getName() : null;
+        if (skippedClassLoaders.contains(classLoaderClassName)) {
+            return bytes;
+        }
+
         LOGGER.trace("Transform on class '{}' @{} redefiningClass '{}'.", className, classLoader, redefiningClass);
 
-        List<ClassFileTransformer> toApply = new LinkedList<>();
-        List<PluginClassFileTransformer> pluginTransformers = new LinkedList<>();
+        List<ClassFileTransformer> toApply = new ArrayList<>();
+        List<PluginClassFileTransformer> pluginTransformers = new ArrayList<>();
         try {
-            // call transform on all registered transformers
-            for (RegisteredTransformersRecord transformerRecord : new LinkedList<RegisteredTransformersRecord>(registeredTransformers.values())) {
+            // 1. call transform method of defining transformers
+            for (RegisteredTransformersRecord transformerRecord : new ArrayList<RegisteredTransformersRecord>(otherTransformers.values())) {
                 if ((className != null && transformerRecord.pattern.matcher(className).matches()) ||
                         (redefiningClass != null && transformerRecord.pattern.matcher(redefiningClass.getName()).matches())) {
-
-                    for (ClassFileTransformer transformer : new LinkedList<ClassFileTransformer>(transformerRecord.transformerList)) {
+                    for (ClassFileTransformer transformer : new ArrayList<ClassFileTransformer>(transformerRecord.transformerList)) {
                         if(transformer instanceof PluginClassFileTransformer) {
                             PluginClassFileTransformer pcft = PluginClassFileTransformer.class.cast(transformer);
                             if(!pcft.isPluginDisabled(classLoader)) {
@@ -153,6 +201,23 @@ public class HotswapTransformer implements ClassFileTransformer {
                             }
                         } else {
                             toApply.add(transformer);
+                        }
+                    }
+                }
+            }
+            // 2. call transform method of redefining ttansformars
+            if (redefiningClass != null && className != null) {
+                for (RegisteredTransformersRecord transformerRecord : new ArrayList<RegisteredTransformersRecord>(redefinitionTransformers.values())) {
+                    if (transformerRecord.pattern.matcher(className).matches()) {
+                        for (ClassFileTransformer transformer : new ArrayList<ClassFileTransformer>(transformerRecord.transformerList)) {
+                            if(transformer instanceof PluginClassFileTransformer) {
+                                PluginClassFileTransformer pcft = PluginClassFileTransformer.class.cast(transformer);
+                                if(!pcft.isPluginDisabled(classLoader)) {
+                                    pluginTransformers.add(pcft);
+                                }
+                            } else {
+                                toApply.add(transformer);
+                            }
                         }
                     }
                 }
@@ -165,13 +230,13 @@ public class HotswapTransformer implements ClassFileTransformer {
             pluginTransformers =  reduce(classLoader, pluginTransformers, className);
         }
 
+        // ensure classloader initialized
+       ensureClassLoaderInitialized(classLoader, protectionDomain);
+
         if(toApply.isEmpty() && pluginTransformers.isEmpty()) {
             LOGGER.trace("No transformers defing for {} ", className);
             return bytes;
         }
-
-        // ensure classloader initialized
-       ensureClassLoaderInitialized(classLoader, protectionDomain);
 
        try {
            byte[] result = bytes;
@@ -195,26 +260,32 @@ public class HotswapTransformer implements ClassFileTransformer {
     LinkedList<PluginClassFileTransformer> reduce(final ClassLoader classLoader, List<PluginClassFileTransformer> pluginCalls, String className) {
         LinkedList<PluginClassFileTransformer> reduced = new LinkedList<>();
 
-        PluginClassFileTransformer def = null;
+        Map<String, PluginClassFileTransformer> fallbackMap = new HashMap<>();
 
         for (PluginClassFileTransformer pcft : pluginCalls) {
             try {
+                String pluginGroup = pcft.getPluginGroup();
                 if(pcft.versionMatches(classLoader)){
+                    if (pluginGroup != null) {
+                        fallbackMap.put(pluginGroup, null);
+                    }
                     reduced.add(pcft);
-                } else if(pcft.isDefaultPlugin()){
-                    def = pcft;
+                } else if(pcft.isFallbackPlugin()){
+                    if (pluginGroup != null && !fallbackMap.containsKey(pluginGroup)) {
+                        fallbackMap.put(pluginGroup, pcft);
+                    }
                 }
             } catch (Exception e) {
                 LOGGER.warning("Error evaluating aplicability of plugin", e);
             }
         }
 
-        if(reduced.isEmpty() && def != null) {
-            reduced.add(def);
+        for (PluginClassFileTransformer pcft: fallbackMap.values()) {
+            if (pcft != null) {
+                reduced.add(pcft);
+            }
         }
-//        if(reduced.size() >1){
-//            LOGGER.warn("Multiple plugins will attempt patching for class {}, {}", className, reduced);
-//        }
+
         return reduced;
     }
     /**
@@ -242,27 +313,7 @@ public class HotswapTransformer implements ClassFileTransformer {
                     PluginManager.getInstance().getScheduler().scheduleCommand(new Command() {
                         @Override
                         public void executeCommand() {
-//                            //
-//                            // Synchronize class loader to avoid DEADLOCKs on PluginManager.INSTANCE.
-//                            //
-//                            // Explanation:
-//                            // There are 2 possible places from which the PluginManager.getInstance().initClassLoader() can be called:
-//                            // 1. sun.instrument.TransformerManager.transform ->
-//                            //                   org.hotswap.agent.util.HotswapTransformer.transform ->
-//                            //                              PluginClassFileTransformer.transform() ->
-//                            //                                          PluginManager.initClassLoader()
-//                            //    In this case class loader is locked before call sun.instrument.TransformerManager.transform, subsequently
-//                            //    an attempt to get PluginManager.INSTANCE lock is done in  PluginManager.initClassLoader()
-//                            // 2. From this fallback. The lock is acquired in PluginManager.initClassLoader(), then an attempt to get ClassLoader
-//                            //    lock is done when ClassLoaderDefineClassPatcher makes copy of HA'classes in the new classloader.
-//                            //
-//                            // conclusion : classloader must be locked before PluginManager.getInstance().initClassLoader is called.
-//                            synchronized (classLoader) {
-                                PluginManager.getInstance().initClassLoader(classLoader, protectionDomain);
-//                            }
-                            //
-                            //
-                            //
+                            PluginManager.getInstance().initClassLoader(classLoader, protectionDomain);
                         }
 
                         @Override

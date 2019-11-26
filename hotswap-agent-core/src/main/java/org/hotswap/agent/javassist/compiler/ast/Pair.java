@@ -23,6 +23,8 @@ import org.hotswap.agent.javassist.compiler.CompileError;
  * overriding abstract methods in ASTree.
  */
 public class Pair extends ASTree {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     protected ASTree left, right;
 
     public Pair(ASTree _left, ASTree _right) {
@@ -30,10 +32,10 @@ public class Pair extends ASTree {
         right = _right;
     }
 
-    public void accept(Visitor v) throws CompileError {
-        v.atPair(this);
-    }
+    @Override
+    public void accept(Visitor v) throws CompileError { v.atPair(this); }
 
+    @Override
     public String toString() {
         StringBuffer sbuf = new StringBuffer();
         sbuf.append("(<Pair> ");
@@ -44,19 +46,15 @@ public class Pair extends ASTree {
         return sbuf.toString();
     }
 
-    public ASTree getLeft() {
-        return left;
-    }
+    @Override
+    public ASTree getLeft() { return left; }
 
-    public ASTree getRight() {
-        return right;
-    }
+    @Override
+    public ASTree getRight() { return right; }
 
-    public void setLeft(ASTree _left) {
-        left = _left;
-    }
+    @Override
+    public void setLeft(ASTree _left) { left = _left; }
 
-    public void setRight(ASTree _right) {
-        right = _right;
-    }
+    @Override
+    public void setRight(ASTree _right) { right = _right; }
 }

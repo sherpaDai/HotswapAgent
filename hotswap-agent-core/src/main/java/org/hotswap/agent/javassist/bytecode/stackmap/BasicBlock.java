@@ -17,7 +17,17 @@
 package org.hotswap.agent.javassist.bytecode.stackmap;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.hotswap.agent.javassist.bytecode.BadBytecode;
+import org.hotswap.agent.javassist.bytecode.CodeAttribute;
+import org.hotswap.agent.javassist.bytecode.CodeIterator;
+import org.hotswap.agent.javassist.bytecode.ExceptionTable;
+import org.hotswap.agent.javassist.bytecode.MethodInfo;
+import org.hotswap.agent.javassist.bytecode.Opcode;
 
 /**
  * A basic block is a sequence of bytecode that does not contain jump/branch
@@ -26,10 +36,11 @@ import java.util.HashMap;
  * it finds JSR.
  */
 public class BasicBlock {
-    static class JsrBytecode extends org.hotswap.agent.javassist.bytecode.BadBytecode {
-        JsrBytecode() {
-            super("JSR");
-        }
+    static class JsrBytecode extends BadBytecode {
+        /** default serialVersionUID */
+        private static final long serialVersionUID = 1L;
+
+        JsrBytecode() { super("JSR"); }
     }
 
     protected int position, length;
@@ -45,21 +56,19 @@ public class BasicBlock {
     }
 
     public static BasicBlock find(BasicBlock[] blocks, int pos)
-            throws org.hotswap.agent.javassist.bytecode.BadBytecode {
-        for (int i = 0; i < blocks.length; i++) {
-            int iPos = blocks[i].position;
-            if (iPos <= pos && pos < iPos + blocks[i].length)
-                return blocks[i];
-        }
+        throws BadBytecode
+    {
+        for (BasicBlock b:blocks)
+            if (b.position <= pos && pos < b.position + b.length)
+                return b;
 
-        throw new org.hotswap.agent.javassist.bytecode.BadBytecode("no basic block at " + pos);
+        throw new BadBytecode("no basic block at " + pos);
     }
 
     public static class Catch {
         public Catch next;
         public BasicBlock body;
         public int typeIndex;
-
         Catch(BasicBlock b, int i, Catch c) {
             body = b;
             typeIndex = i;
@@ -67,6 +76,7 @@ public class BasicBlock {
         }
     }
 
+    @Override
     public String toString() {
         StringBuffer sbuf = new StringBuffer();
         String cname = this.getClass().getName();
@@ -80,25 +90,28 @@ public class BasicBlock {
 
     protected void toString2(StringBuffer sbuf) {
         sbuf.append("pos=").append(position).append(", len=")
-                .append(length).append(", in=").append(incoming)
-                .append(", exit{");
-        if (exit != null) {
-            for (int i = 0; i < exit.length; i++)
-                sbuf.append(exit[i].position).append(",");
-        }
+            .append(length).append(", in=").append(incoming)
+            .append(", exit{");
+        if (exit != null)
+            for (BasicBlock b:exit)
+                sbuf.append(b.position).append(",");
 
         sbuf.append("}, {");
         Catch th = toCatch;
         while (th != null) {
             sbuf.append("(").append(th.body.position).append(", ")
-                    .append(th.typeIndex).append("), ");
+                .append(th.typeIndex).append("), ");
             th = th.next;
         }
 
         sbuf.append("}");
     }
 
-    static class Mark implements Comparable {
+    /**
+     * A Mark indicates the position of a branch instruction
+     * or a branch target.
+     */
+    static class Mark implements Comparable<Mark> {
         int position;
         BasicBlock block;
         BasicBlock[] jump;
@@ -115,13 +128,11 @@ public class BasicBlock {
             catcher = null;
         }
 
-        public int compareTo(Object obj) {
-            if (obj instanceof Mark) {
-                int pos = ((Mark) obj).position;
-                return position - pos;
-            }
-
-            return -1;
+        @Override
+        public int compareTo(Mark obj) {
+            if (null == obj)
+                return -1;
+            return position - obj.position;
         }
 
         void setJump(BasicBlock[] bb, int s, boolean always) {
@@ -156,19 +167,20 @@ public class BasicBlock {
             return array;
         }
 
-        public BasicBlock[] make(org.hotswap.agent.javassist.bytecode.MethodInfo minfo) throws org.hotswap.agent.javassist.bytecode.BadBytecode {
-            org.hotswap.agent.javassist.bytecode.CodeAttribute ca = minfo.getCodeAttribute();
+        public BasicBlock[] make(MethodInfo minfo) throws BadBytecode {
+            CodeAttribute ca = minfo.getCodeAttribute();
             if (ca == null)
                 return null;
 
-            org.hotswap.agent.javassist.bytecode.CodeIterator ci = ca.iterator();
+            CodeIterator ci = ca.iterator();
             return make(ci, 0, ci.getCodeLength(), ca.getExceptionTable());
         }
 
-        public BasicBlock[] make(org.hotswap.agent.javassist.bytecode.CodeIterator ci, int begin, int end,
-                                 org.hotswap.agent.javassist.bytecode.ExceptionTable et)
-                throws org.hotswap.agent.javassist.bytecode.BadBytecode {
-            HashMap marks = makeMarks(ci, begin, end, et);
+        public BasicBlock[] make(CodeIterator ci, int begin, int end,
+                                 ExceptionTable et)
+            throws BadBytecode
+        {
+            Map<Integer,Mark> marks = makeMarks(ci, begin, end, et);
             BasicBlock[] bb = makeBlocks(marks);
             addCatchers(bb, et);
             return bb;
@@ -176,24 +188,24 @@ public class BasicBlock {
 
         /* Branch target
          */
-        private Mark makeMark(HashMap table, int pos) {
+        private Mark makeMark(Map<Integer,Mark> table, int pos) {
             return makeMark0(table, pos, true, true);
         }
 
         /* Branch instruction.
          * size > 0
          */
-        private Mark makeMark(HashMap table, int pos, BasicBlock[] jump,
+        private Mark makeMark(Map<Integer,Mark> table, int pos, BasicBlock[] jump,
                               int size, boolean always) {
             Mark m = makeMark0(table, pos, false, false);
             m.setJump(jump, size, always);
             return m;
         }
 
-        private Mark makeMark0(HashMap table, int pos,
+        private Mark makeMark0(Map<Integer,Mark> table, int pos,
                                boolean isBlockBegin, boolean isTarget) {
-            Integer p = new Integer(pos);
-            Mark m = (Mark) table.get(p);
+            Integer p = pos;
+            Mark m = table.get(p);
             if (m == null) {
                 m = new Mark(pos);
                 table.put(p, m);
@@ -210,74 +222,74 @@ public class BasicBlock {
             return m;
         }
 
-        private HashMap makeMarks(org.hotswap.agent.javassist.bytecode.CodeIterator ci, int begin, int end,
-                                  org.hotswap.agent.javassist.bytecode.ExceptionTable et)
-                throws org.hotswap.agent.javassist.bytecode.BadBytecode {
+        private Map<Integer,Mark> makeMarks(CodeIterator ci, int begin, int end,
+                                  ExceptionTable et)
+            throws BadBytecode
+        {
             ci.begin();
             ci.move(begin);
-            HashMap marks = new HashMap();
+            Map<Integer,Mark> marks = new HashMap<Integer,Mark>();
             while (ci.hasNext()) {
                 int index = ci.next();
                 if (index >= end)
                     break;
 
                 int op = ci.byteAt(index);
-                if ((org.hotswap.agent.javassist.bytecode.Opcode.IFEQ <= op && op <= org.hotswap.agent.javassist.bytecode.Opcode.IF_ACMPNE)
-                        || op == org.hotswap.agent.javassist.bytecode.Opcode.IFNULL || op == org.hotswap.agent.javassist.bytecode.Opcode.IFNONNULL) {
+                if ((Opcode.IFEQ <= op && op <= Opcode.IF_ACMPNE)
+                        || op == Opcode.IFNULL || op == Opcode.IFNONNULL) {
                     Mark to = makeMark(marks, index + ci.s16bitAt(index + 1));
                     Mark next = makeMark(marks, index + 3);
                     makeMark(marks, index, makeArray(to.block, next.block), 3, false);
-                } else if (org.hotswap.agent.javassist.bytecode.Opcode.GOTO <= op && op <= org.hotswap.agent.javassist.bytecode.Opcode.LOOKUPSWITCH)
+                }
+                else if (Opcode.GOTO <= op && op <= Opcode.LOOKUPSWITCH)
                     switch (op) {
-                        case org.hotswap.agent.javassist.bytecode.Opcode.GOTO:
-                            makeGoto(marks, index, index + ci.s16bitAt(index + 1), 3);
-                            break;
-                        case org.hotswap.agent.javassist.bytecode.Opcode.JSR:
-                            makeJsr(marks, index, index + ci.s16bitAt(index + 1), 3);
-                            break;
-                        case org.hotswap.agent.javassist.bytecode.Opcode.RET:
-                            makeMark(marks, index, null, 2, true);
-                            break;
-                        case org.hotswap.agent.javassist.bytecode.Opcode.TABLESWITCH: {
-                            int pos = (index & ~3) + 4;
-                            int low = ci.s32bitAt(pos + 4);
-                            int high = ci.s32bitAt(pos + 8);
-                            int ncases = high - low + 1;
-                            BasicBlock[] to = makeArray(ncases + 1);
-                            to[0] = makeMark(marks, index + ci.s32bitAt(pos)).block;   // default branch target
-                            int p = pos + 12;
-                            int n = p + ncases * 4;
-                            int k = 1;
-                            while (p < n) {
-                                to[k++] = makeMark(marks, index + ci.s32bitAt(p)).block;
-                                p += 4;
-                            }
-                            makeMark(marks, index, to, n - index, true);
-                            break;
+                    case Opcode.GOTO :
+                        makeGoto(marks, index, index + ci.s16bitAt(index + 1), 3);
+                        break;
+                    case Opcode.JSR :
+                        makeJsr(marks, index, index + ci.s16bitAt(index + 1), 3);
+                        break;
+                    case Opcode.RET :
+                        makeMark(marks, index, null, 2, true);
+                        break;
+                    case Opcode.TABLESWITCH : {
+                        int pos = (index & ~3) + 4;
+                        int low = ci.s32bitAt(pos + 4);
+                        int high = ci.s32bitAt(pos + 8);
+                        int ncases = high - low + 1;
+                        BasicBlock[] to = makeArray(ncases + 1);
+                        to[0] = makeMark(marks, index + ci.s32bitAt(pos)).block;   // default branch target
+                        int p = pos + 12;
+                        int n = p + ncases * 4;
+                        int k = 1;
+                        while (p < n) {
+                            to[k++] = makeMark(marks, index + ci.s32bitAt(p)).block;
+                            p += 4;
                         }
-                        case org.hotswap.agent.javassist.bytecode.Opcode.LOOKUPSWITCH: {
-                            int pos = (index & ~3) + 4;
-                            int ncases = ci.s32bitAt(pos + 4);
-                            BasicBlock[] to = makeArray(ncases + 1);
-                            to[0] = makeMark(marks, index + ci.s32bitAt(pos)).block;   // default branch target
-                            int p = pos + 8 + 4;
-                            int n = p + ncases * 8 - 4;
-                            int k = 1;
-                            while (p < n) {
-                                to[k++] = makeMark(marks, index + ci.s32bitAt(p)).block;
-                                p += 8;
-                            }
-                            makeMark(marks, index, to, n - index, true);
-                            break;
+                        makeMark(marks, index, to, n - index, true);
+                        break; }
+                    case Opcode.LOOKUPSWITCH : {
+                        int pos = (index & ~3) + 4;
+                        int ncases = ci.s32bitAt(pos + 4);
+                        BasicBlock[] to = makeArray(ncases + 1);
+                        to[0] = makeMark(marks, index + ci.s32bitAt(pos)).block;   // default branch target
+                        int p = pos + 8 + 4;
+                        int n = p + ncases * 8 - 4;
+                        int k = 1;
+                        while (p < n) {
+                            to[k++] = makeMark(marks, index + ci.s32bitAt(p)).block;
+                            p += 8;
                         }
+                        makeMark(marks, index, to, n - index, true);
+                        break; }
                     }
-                else if ((org.hotswap.agent.javassist.bytecode.Opcode.IRETURN <= op && op <= org.hotswap.agent.javassist.bytecode.Opcode.RETURN) || op == org.hotswap.agent.javassist.bytecode.Opcode.ATHROW)
+                else if ((Opcode.IRETURN <= op && op <= Opcode.RETURN) || op == Opcode.ATHROW)
                     makeMark(marks, index, null, 1, true);
-                else if (op == org.hotswap.agent.javassist.bytecode.Opcode.GOTO_W)
+                else if (op == Opcode.GOTO_W)
                     makeGoto(marks, index, index + ci.s32bitAt(index + 1), 5);
-                else if (op == org.hotswap.agent.javassist.bytecode.Opcode.JSR_W)
+                else if (op == Opcode.JSR_W)
                     makeJsr(marks, index, index + ci.s32bitAt(index + 1), 5);
-                else if (op == org.hotswap.agent.javassist.bytecode.Opcode.WIDE && ci.byteAt(index + 1) == org.hotswap.agent.javassist.bytecode.Opcode.RET)
+                else if (op == Opcode.WIDE && ci.byteAt(index + 1) == Opcode.RET)
                     makeMark(marks, index, null, 4, true);
             }
 
@@ -292,7 +304,7 @@ public class BasicBlock {
             return marks;
         }
 
-        private void makeGoto(HashMap marks, int pos, int target, int size) {
+        private void makeGoto(Map<Integer,Mark> marks, int pos, int target, int size) {
             Mark to = makeMark(marks, target);
             BasicBlock[] jumps = makeArray(to.block);
             makeMark(marks, pos, jumps, size, true);
@@ -302,7 +314,7 @@ public class BasicBlock {
          * We could ignore JSR since Java 7 or later does not allow it.
          * See The JVM Spec. Sec. 4.10.2.5.
          */
-        protected void makeJsr(HashMap marks, int pos, int target, int size) throws org.hotswap.agent.javassist.bytecode.BadBytecode {
+        protected void makeJsr(Map<Integer,Mark> marks, int pos, int target, int size) throws BadBytecode {
             /*
             Mark to = makeMark(marks, target);
             Mark next = makeMark(marks, pos + size);
@@ -312,11 +324,10 @@ public class BasicBlock {
             throw new JsrBytecode();
         }
 
-        private BasicBlock[] makeBlocks(HashMap markTable) {
-            Mark[] marks = (Mark[]) markTable.values()
-                    .toArray(new Mark[markTable.size()]);
-            java.util.Arrays.sort(marks);
-            ArrayList blocks = new ArrayList();
+        private BasicBlock[] makeBlocks(Map<Integer,Mark> markTable) {
+            Mark[] marks = markTable.values().toArray(new Mark[markTable.size()]);
+            Arrays.sort(marks);
+            List<BasicBlock> blocks = new ArrayList<BasicBlock>();
             int i = 0;
             BasicBlock prev;
             if (marks.length > 0 && marks[0].position == 0 && marks[0].block != null)
@@ -339,20 +350,24 @@ public class BasicBlock {
                     prev.length = m.position + m.size - prev.position;
                     prev.exit = m.jump;
                     prev.stop = m.alwaysJmp;
-                } else {
+                }
+                else {
                     // the mark indicates a branch target
                     if (prev.length == 0) {
                         prev.length = m.position - prev.position;
                         bb.incoming++;
                         prev.exit = makeArray(bb);
-                    } else {
+                    }
+                    else {
                         // the previous mark already has exits.
-                        int prevPos = prev.position;
-                        if (prevPos + prev.length < m.position) {
-                            prev = makeBlock(prevPos + prev.length);
-                            prev.length = m.position - prevPos;
+                        if (prev.position + prev.length < m.position) {
+                            // dead code is found.
+                            prev = makeBlock(prev.position + prev.length);
+                            blocks.add(prev);
+                            prev.length = m.position - prev.position;
                             // the incoming flow from dead code is not counted
                             // bb.incoming++;
+                            prev.stop = true;   // because the incoming flow is not counted.
                             prev.exit = makeArray(bb);
                         }
                     }
@@ -362,7 +377,7 @@ public class BasicBlock {
                 }
             }
 
-            return (BasicBlock[]) blocks.toArray(makeArray(blocks.size()));
+            return blocks.toArray(makeArray(blocks.size()));
         }
 
         private static BasicBlock getBBlock(Mark m) {
@@ -376,8 +391,9 @@ public class BasicBlock {
             return b;
         }
 
-        private void addCatchers(BasicBlock[] blocks, org.hotswap.agent.javassist.bytecode.ExceptionTable et)
-                throws org.hotswap.agent.javassist.bytecode.BadBytecode {
+        private void addCatchers(BasicBlock[] blocks, ExceptionTable et)
+            throws BadBytecode
+        {
             if (et == null)
                 return;
 

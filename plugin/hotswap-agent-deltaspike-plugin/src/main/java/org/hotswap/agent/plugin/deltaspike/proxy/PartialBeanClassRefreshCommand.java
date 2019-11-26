@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.deltaspike.proxy;
 
 import java.lang.reflect.InvocationTargetException;
@@ -5,6 +23,7 @@ import java.lang.reflect.Method;
 
 import org.hotswap.agent.command.MergeableCommand;
 import org.hotswap.agent.logging.AgentLogger;
+import org.hotswap.agent.plugin.deltaspike.transformer.RepositoryTransformer;
 
 public class PartialBeanClassRefreshCommand extends MergeableCommand  {
 
@@ -14,7 +33,6 @@ public class PartialBeanClassRefreshCommand extends MergeableCommand  {
     Object partialBean;
     String className;
     Object repositoryComponent;
-
 
     public PartialBeanClassRefreshCommand(ClassLoader classLoader, Object partialBean, String className) {
         this.classLoader = classLoader;
@@ -47,7 +65,8 @@ public class PartialBeanClassRefreshCommand extends MergeableCommand  {
         if (reloaded) {
             if (repositoryComponent != null) {
                 try {
-                    Method reinitializeMethod = resolveClass("org.apache.deltaspike.data.impl.meta.RepositoryComponent").getDeclaredMethod("__reinitialize");
+                    Method reinitializeMethod = resolveClass("org.apache.deltaspike.data.impl.meta.RepositoryComponent")
+                            .getDeclaredMethod(RepositoryTransformer.REINITIALIZE_METHOD);
                     reinitializeMethod.invoke(repositoryComponent);
                 } catch (Exception e) {
                     LOGGER.error("Error reinitializing repository {}", e, className);
@@ -69,6 +88,7 @@ public class PartialBeanClassRefreshCommand extends MergeableCommand  {
 
         if (!classLoader.equals(that.classLoader)) return false;
         if (!partialBean.equals(that.partialBean)) return false;
+        if (!className.equals(that.className)) return false;
 
         return true;
     }

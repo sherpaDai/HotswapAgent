@@ -16,10 +16,14 @@
 
 package org.hotswap.agent.javassist.scopedpool;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 import org.hotswap.agent.javassist.ClassPool;
 import org.hotswap.agent.javassist.LoaderClassPath;
-
-import java.util.*;
 
 /**
  * An implementation of <code>ScopedClassPoolRepository</code>.
@@ -28,44 +32,32 @@ import java.util.*;
  * @author <a href="kabir.khan@jboss.com">Kabir Khan</a>
  * @version $Revision: 1.4 $
  */
-public class ScopedClassPoolRepositoryImpl implements org.hotswap.agent.javassist.scopedpool.ScopedClassPoolRepository {
-    /**
-     * The instance
-     */
+public class ScopedClassPoolRepositoryImpl implements ScopedClassPoolRepository {
+    /** The instance */
     private static final ScopedClassPoolRepositoryImpl instance = new ScopedClassPoolRepositoryImpl();
 
-    /**
-     * Whether to prune
-     */
+    /** Whether to prune */
     private boolean prune = true;
 
-    /**
-     * Whether to prune when added to the classpool's cache
-     */
+    /** Whether to prune when added to the classpool's cache */
     boolean pruneWhenCached;
 
-    /**
-     * The registered classloaders
-     */
-    protected Map registeredCLs = Collections
-            .synchronizedMap(new WeakHashMap());
+    /** The registered classloaders */
+    protected Map<ClassLoader,ScopedClassPool> registeredCLs = Collections
+            .synchronizedMap(new WeakHashMap<ClassLoader,ScopedClassPool>());
 
-    /**
-     * The default class pool
-     */
+    /** The default class pool */
     protected ClassPool classpool;
 
-    /**
-     * The factory for creating class pools
-     */
-    protected org.hotswap.agent.javassist.scopedpool.ScopedClassPoolFactory factory = new ScopedClassPoolFactoryImpl();
+    /** The factory for creating class pools */
+    protected ScopedClassPoolFactory factory = new ScopedClassPoolFactoryImpl();
 
     /**
      * Get the instance.
-     *
+     * 
      * @return the instance.
      */
-    public static org.hotswap.agent.javassist.scopedpool.ScopedClassPoolRepository getInstance() {
+    public static ScopedClassPoolRepository getInstance() {
         return instance;
     }
 
@@ -81,33 +73,37 @@ public class ScopedClassPoolRepositoryImpl implements org.hotswap.agent.javassis
 
     /**
      * Returns the value of the prune attribute.
-     *
+     * 
      * @return the prune.
      */
+    @Override
     public boolean isPrune() {
         return prune;
     }
 
     /**
      * Set the prune attribute.
-     *
-     * @param prune a new value.
+     * 
+     * @param prune     a new value.
      */
+    @Override
     public void setPrune(boolean prune) {
         this.prune = prune;
     }
 
     /**
      * Create a scoped classpool.
-     *
-     * @param cl  the classloader.
-     * @param src the original classpool.
+     * 
+     * @param cl    the classloader.
+     * @param src   the original classpool.
      * @return the classpool
      */
-    public org.hotswap.agent.javassist.scopedpool.ScopedClassPool createScopedClassPool(ClassLoader cl, ClassPool src) {
+    @Override
+    public ScopedClassPool createScopedClassPool(ClassLoader cl, ClassPool src) {
         return factory.create(cl, src, this);
     }
 
+    @Override
     public ClassPool findClassPool(ClassLoader cl) {
         if (cl == null)
             return registerClassLoader(ClassLoader.getSystemClassLoader());
@@ -117,10 +113,11 @@ public class ScopedClassPoolRepositoryImpl implements org.hotswap.agent.javassis
 
     /**
      * Register a classloader.
-     *
-     * @param ucl the classloader.
+     * 
+     * @param ucl       the classloader.
      * @return the classpool
      */
+    @Override
     public ClassPool registerClassLoader(ClassLoader ucl) {
         synchronized (registeredCLs) {
             // FIXME: Probably want to take this method out later
@@ -129,9 +126,9 @@ public class ScopedClassPoolRepositoryImpl implements org.hotswap.agent.javassis
             // a
             // ClassPool.classpath
             if (registeredCLs.containsKey(ucl)) {
-                return (ClassPool) registeredCLs.get(ucl);
+                return registeredCLs.get(ucl);
             }
-            org.hotswap.agent.javassist.scopedpool.ScopedClassPool pool = createScopedClassPool(ucl, classpool);
+            ScopedClassPool pool = createScopedClassPool(ucl, classpool);
             registeredCLs.put(ucl, pool);
             return pool;
         }
@@ -140,7 +137,8 @@ public class ScopedClassPoolRepositoryImpl implements org.hotswap.agent.javassis
     /**
      * Get the registered classloaders.
      */
-    public Map getRegisteredCLs() {
+    @Override
+    public Map<ClassLoader,ScopedClassPool> getRegisteredCLs() {
         clearUnregisteredClassLoaders();
         return registeredCLs;
     }
@@ -149,48 +147,47 @@ public class ScopedClassPoolRepositoryImpl implements org.hotswap.agent.javassis
      * This method will check to see if a register classloader has been
      * undeployed (as in JBoss)
      */
+    @Override
     public void clearUnregisteredClassLoaders() {
-        ArrayList toUnregister = null;
+        List<ClassLoader> toUnregister = null;
         synchronized (registeredCLs) {
-            Iterator it = registeredCLs.values().iterator();
-            while (it.hasNext()) {
-                org.hotswap.agent.javassist.scopedpool.ScopedClassPool pool = (org.hotswap.agent.javassist.scopedpool.ScopedClassPool) it.next();
-                if (pool.isUnloadedClassLoader()) {
-                    it.remove();
-                    ClassLoader cl = pool.getClassLoader();
+            for (Map.Entry<ClassLoader,ScopedClassPool> reg:registeredCLs.entrySet()) {
+                if (reg.getValue().isUnloadedClassLoader()) {
+                    ClassLoader cl = reg.getValue().getClassLoader();
                     if (cl != null) {
-                        if (toUnregister == null) {
-                            toUnregister = new ArrayList();
-                        }
+                        if (toUnregister == null)
+                            toUnregister = new ArrayList<ClassLoader>();
                         toUnregister.add(cl);
                     }
+                    registeredCLs.remove(reg.getKey());
                 }
             }
-            if (toUnregister != null) {
-                for (int i = 0; i < toUnregister.size(); i++) {
-                    unregisterClassLoader((ClassLoader) toUnregister.get(i));
-                }
-            }
+            if (toUnregister != null)
+                for (ClassLoader cl:toUnregister)
+                    unregisterClassLoader(cl);
         }
     }
 
+    @Override
     public void unregisterClassLoader(ClassLoader cl) {
         synchronized (registeredCLs) {
-            org.hotswap.agent.javassist.scopedpool.ScopedClassPool pool = (org.hotswap.agent.javassist.scopedpool.ScopedClassPool) registeredCLs.remove(cl);
+            ScopedClassPool pool = registeredCLs.remove(cl);
             if (pool != null)
                 pool.close();
         }
     }
 
-    public void insertDelegate(org.hotswap.agent.javassist.scopedpool.ScopedClassPoolRepository delegate) {
+    public void insertDelegate(ScopedClassPoolRepository delegate) {
         // Noop - this is the end
     }
 
-    public void setClassPoolFactory(org.hotswap.agent.javassist.scopedpool.ScopedClassPoolFactory factory) {
+    @Override
+    public void setClassPoolFactory(ScopedClassPoolFactory factory) {
         this.factory = factory;
     }
 
-    public org.hotswap.agent.javassist.scopedpool.ScopedClassPoolFactory getClassPoolFactory() {
+    @Override
+    public ScopedClassPoolFactory getClassPoolFactory() {
         return factory;
     }
 }

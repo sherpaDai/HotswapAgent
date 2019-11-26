@@ -1,15 +1,35 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.watchResources;
 
-import org.hotswap.agent.config.PluginManager;
+import java.net.URL;
+import java.net.URLClassLoader;
+
 import org.hotswap.agent.annotation.Init;
 import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.config.PluginConfiguration;
+import org.hotswap.agent.config.PluginManager;
 import org.hotswap.agent.logging.AgentLogger;
-import org.hotswap.agent.util.classloader.WatchResourcesClassLoader;
+import org.hotswap.agent.util.classloader.HotswapAgentClassLoaderExt;
 import org.hotswap.agent.util.classloader.URLClassLoaderHelper;
+import org.hotswap.agent.util.classloader.WatchResourcesClassLoader;
 import org.hotswap.agent.watch.Watcher;
-
-import java.net.*;
 
 /**
  * Support for watchResources configuration property.
@@ -60,14 +80,13 @@ public class WatchResourcesPlugin {
             return;
         }
 
-        if (!(appClassLoader instanceof URLClassLoader)) {
+        if (!(appClassLoader instanceof URLClassLoader) && !(appClassLoader instanceof HotswapAgentClassLoaderExt)) {
             LOGGER.warning("Unable to modify application classloader. Classloader '{}' is of type '{}'," +
-                    "but only URLClassLoader is supported.\n" +
+                    "unknown classloader type.\n" +
                     "*** watchResources configuration property will not be handled on JVM level ***",
                     appClassLoader, appClassLoader.getClass());
             return;
         }
-
 
         // create new plugin instance
         WatchResourcesPlugin plugin = (WatchResourcesPlugin) pluginManager.getPluginRegistry()
@@ -86,7 +105,11 @@ public class WatchResourcesPlugin {
         // configure the classloader to return only changed resources on watchResources path
         watchResourcesClassLoader.initWatchResources(watchResources, watcher);
 
-        // modify the application classloader to look for resources first in watchResourcesClassLoader
-        URLClassLoaderHelper.setWatchResourceLoader((URLClassLoader)appClassLoader, watchResourcesClassLoader);
+        if (appClassLoader instanceof URLClassLoader) {
+            // modify the application classloader to look for resources first in watchResourcesClassLoader
+            URLClassLoaderHelper.setWatchResourceLoader((URLClassLoader)appClassLoader, watchResourcesClassLoader);
+        } else if (appClassLoader instanceof HotswapAgentClassLoaderExt) {
+            ((HotswapAgentClassLoaderExt)appClassLoader).$$ha$setWatchResourceLoader(watchResourcesClassLoader);
+        }
     }
 }

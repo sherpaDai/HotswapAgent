@@ -20,6 +20,9 @@ package org.hotswap.agent.javassist.bytecode;
  * Signals that a bad bytecode sequence has been found.
  */
 public class BadBytecode extends Exception {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
+
     public BadBytecode(int opcode) {
         super("bytecode " + opcode);
     }
@@ -34,7 +37,7 @@ public class BadBytecode extends Exception {
 
     public BadBytecode(MethodInfo minfo, Throwable cause) {
         super(minfo.toString() + " in "
-                + minfo.getConstPool().getClassName()
-                + ": " + cause.getMessage(), cause);
+              + minfo.getConstPool().getClassName()
+              + ": " + cause.getMessage(), cause);
     }
 }

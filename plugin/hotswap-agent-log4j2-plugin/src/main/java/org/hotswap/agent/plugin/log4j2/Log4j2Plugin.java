@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.log4j2;
 
 import org.hotswap.agent.annotation.FileEvent;
@@ -52,36 +70,44 @@ public class Log4j2Plugin {
     public void init(final Object config) {
 
         URI configURI = null;
+        String url = null;
 
         try {
             Class<?> configurationClass = appClassLoader.loadClass("org.apache.logging.log4j.core.config.Configuration");
             Class<?> configurationSourceClass = appClassLoader.loadClass("org.apache.logging.log4j.core.config.ConfigurationSource");
 
             Object configurationSource = configurationClass.getDeclaredMethod("getConfigurationSource").invoke(config);
-            String url = (String) configurationSourceClass.getDeclaredMethod("getLocation").invoke(configurationSource);
-            configURI = Paths.get(url).toUri();
+            url = (String) configurationSourceClass.getDeclaredMethod("getLocation").invoke(configurationSource);
 
-            if (registeredURIs.contains(configURI)) {
-                return;
-            }
+            if (url == null) {
+                LOGGER.warning("Location url is NULL on configurationSource={} - exiting.", configurationSource);
+            } else {
+                configURI = Paths.get(url).toUri();
 
-            final URI parentUri = Paths.get(configURI).getParent().toUri();
-            LOGGER.debug("Watching '{}' URI for Log4j2 configuration changes.", configURI);
-            registeredURIs.add(configURI);
-            watcher.addEventListener(appClassLoader, parentUri, new WatchEventListener() {
-
-                @Override
-                public void onEvent(WatchFileEvent event) {
-                    if (event.getEventType() != FileEvent.DELETE && registeredURIs.contains(event.getURI())) {
-                        reload(event.getURI());
-                    }
+                if (registeredURIs.contains(configURI)) {
+                    return;
                 }
-            });
+
+                final URI parentUri = Paths.get(configURI).getParent().toUri();
+                LOGGER.debug("Watching '{}' URI for Log4j2 configuration changes.", configURI);
+                registeredURIs.add(configURI);
+                watcher.addEventListener(appClassLoader, parentUri, new WatchEventListener() {
+
+                    @Override
+                    public void onEvent(WatchFileEvent event) {
+                        if (event.getEventType() != FileEvent.DELETE && registeredURIs.contains(event.getURI())) {
+                            reload(event.getURI());
+                        }
+                    }
+                });
+            }
 
             if (!initialized) {
                 LOGGER.info("Log4j2 plugin initialized.");
                 initialized = true;
             }
+        } catch (java.nio.file.InvalidPathException e) {
+            LOGGER.debug("Cannot convert {} to Path", url);
         } catch (Exception e) {
             LOGGER.error("Exception initializing Log4j2 on uri {}.", e, configURI);
         }
@@ -127,7 +153,7 @@ public class Log4j2Plugin {
 
         m.insertAfter(PluginManagerInvoker.buildInitializePlugin(Log4j2Plugin.class));
         m.insertAfter(PluginManagerInvoker.buildCallPluginMethod(Log4j2Plugin.class, "init",
-                "config", "java.lang.Object"));
+                "$1", "java.lang.Object"));
 
     }
 

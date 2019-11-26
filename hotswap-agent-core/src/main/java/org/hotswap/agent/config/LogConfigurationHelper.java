@@ -1,6 +1,22 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.config;
-
-import org.hotswap.agent.logging.AgentLogger;
 
 import static java.lang.Boolean.parseBoolean;
 
@@ -8,7 +24,10 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
+import java.util.Locale;
 import java.util.Properties;
+
+import org.hotswap.agent.logging.AgentLogger;
 
 /**
  * Configure LOG level and handler according to properties.
@@ -63,7 +82,7 @@ public class LogConfigurationHelper {
     // resolve level from enum
     private static AgentLogger.Level getLevel(String property, String levelName) {
         try {
-            return AgentLogger.Level.valueOf(levelName.toUpperCase());
+            return AgentLogger.Level.valueOf(levelName.toUpperCase(Locale.ENGLISH));
         } catch (IllegalArgumentException e) {
             LOGGER.warning("Invalid configuration value for property '{}'. Unknown LOG level '{}'.", property, levelName);
             return null;

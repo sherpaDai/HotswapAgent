@@ -25,11 +25,10 @@ import java.util.Map;
 
 import org.hotswap.agent.config.PluginManager;
 import org.jboss.classfilewriter.ClassFile;
-import org.jboss.classfilewriter.util.ByteArrayDataOutputStream;
 import org.jboss.weld.util.bytecode.ClassFileUtils;
 
 /**
- * The CDI proxyFactory has its class loading tasks delegated to this class, which can then have some magic applied
+ * The Weld proxyFactory has its class loading tasks delegated to this class, which can then have some magic applied
  * to make weld think that the class has not been loaded yet.
  *
  * @author Stuart Douglas
@@ -64,10 +63,8 @@ public class ProxyClassLoadingDelegate {
             try {
                 final Class<?> originalProxyClass = loader.loadClass(ct.getName());
                 try {
-                    ByteArrayDataOutputStream out = new ByteArrayDataOutputStream();
-                    ct.write(out);
-                    Map<Class<?>, byte[]> reloadMap = new HashMap<Class<?>, byte[]>();
-                    reloadMap.put(originalProxyClass, out.getBytes());
+                    Map<Class<?>, byte[]> reloadMap = new HashMap<>();
+                    reloadMap.put(originalProxyClass, ct.toBytecode());
                     // TODO : is this standard way how to reload class?
                     PluginManager.getInstance().hotswap(reloadMap);
                     return originalProxyClass;

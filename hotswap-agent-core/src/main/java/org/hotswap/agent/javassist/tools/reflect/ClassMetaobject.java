@@ -27,21 +27,23 @@ import java.util.Arrays;
 
 /**
  * A runtime class metaobject.
- * <p/>
+ *
  * <p>A <code>ClassMetaobject</code> is created for every
  * class of reflective objects.  It can be used to hold values
  * shared among the reflective objects of the same class.
- * <p/>
+ *
  * <p>To obtain a class metaobject, calls <code>_getClass()</code>
  * on a reflective object.  For example,
- * <p/>
- * <ul><pre>ClassMetaobject cm = ((Metalevel)reflectiveObject)._getClass();
- * </pre></ul>
  *
- * @see Metaobject
- * @see Metalevel
+ * <pre>ClassMetaobject cm = ((Metalevel)reflectiveObject)._getClass();
+ * </pre>
+ *
+ * @see javassist.tools.reflect.Metaobject
+ * @see javassist.tools.reflect.Metalevel
  */
 public class ClassMetaobject implements Serializable {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     /**
      * The base-level methods controlled by a metaobject
      * are renamed so that they begin with
@@ -50,15 +52,15 @@ public class ClassMetaobject implements Serializable {
     static final String methodPrefix = "_m_";
     static final int methodPrefixLen = 3;
 
-    private Class javaClass;
-    private Constructor[] constructors;
+    private Class<?> javaClass;
+    private Constructor<?>[] constructors;
     private Method[] methods;
 
     /**
      * Specifies how a <code>java.lang.Class</code> object is loaded.
-     * <p/>
+     *
      * <p>If true, it is loaded by:
-     * <ul><pre>Thread.currentThread().getContextClassLoader().loadClass()</pre></ul>
+     * <pre>Thread.currentThread().getContextClassLoader().loadClass()</pre>
      * <p>If false, it is loaded by <code>Class.forName()</code>.
      * The default value is false.
      */
@@ -67,16 +69,18 @@ public class ClassMetaobject implements Serializable {
     /**
      * Constructs a <code>ClassMetaobject</code>.
      *
-     * @param params <code>params[0]</code> is the name of the class
-     *               of the reflective objects.
+     * @param params    <code>params[0]</code> is the name of the class
+     *                  of the reflective objects.
      */
-    public ClassMetaobject(String[] params) {
+    public ClassMetaobject(String[] params)
+    {
         try {
             javaClass = getClassObject(params[0]);
-        } catch (ClassNotFoundException e) {
+        }
+        catch (ClassNotFoundException e) {
             throw new RuntimeException("not found: " + params[0]
-                    + ", useContextClassLoader: "
-                    + Boolean.toString(useContextClassLoader), e);
+                                       + ", useContextClassLoader: "
+                                       + Boolean.toString(useContextClassLoader), e);
         }
 
         constructors = javaClass.getConstructors();
@@ -88,24 +92,24 @@ public class ClassMetaobject implements Serializable {
     }
 
     private void readObject(ObjectInputStream in)
-            throws IOException, ClassNotFoundException {
+        throws IOException, ClassNotFoundException
+    {
         javaClass = getClassObject(in.readUTF());
         constructors = javaClass.getConstructors();
         methods = null;
     }
 
-    private Class getClassObject(String name) throws ClassNotFoundException {
+    private Class<?> getClassObject(String name) throws ClassNotFoundException {
         if (useContextClassLoader)
             return Thread.currentThread().getContextClassLoader()
-                    .loadClass(name);
-        else
-            return Class.forName(name);
+                   .loadClass(name);
+        return Class.forName(name);
     }
 
     /**
      * Obtains the <code>java.lang.Class</code> representing this class.
      */
-    public final Class getJavaClass() {
+    public final Class<?> getJavaClass() {
         return javaClass;
     }
 
@@ -126,21 +130,26 @@ public class ClassMetaobject implements Serializable {
     /**
      * Creates a new instance of the class.
      *
-     * @param args the arguments passed to the constructor.
+     * @param args              the arguments passed to the constructor.
      */
     public final Object newInstance(Object[] args)
-            throws CannotCreateException {
+        throws CannotCreateException
+    {
         int n = constructors.length;
         for (int i = 0; i < n; ++i) {
             try {
                 return constructors[i].newInstance(args);
-            } catch (IllegalArgumentException e) {
+            }
+            catch (IllegalArgumentException e) {
                 // try again
-            } catch (InstantiationException e) {
+            }
+            catch (InstantiationException e) {
                 throw new CannotCreateException(e);
-            } catch (IllegalAccessException e) {
+            }
+            catch (IllegalAccessException e) {
                 throw new CannotCreateException(e);
-            } catch (InvocationTargetException e) {
+            }
+            catch (InvocationTargetException e) {
                 throw new CannotCreateException(e);
             }
         }
@@ -152,16 +161,18 @@ public class ClassMetaobject implements Serializable {
      * Is invoked when <code>static</code> fields of the base-level
      * class are read and the runtime system intercepts it.
      * This method simply returns the value of the field.
-     * <p/>
+     *
      * <p>Every subclass of this class should redefine this method.
      */
     public Object trapFieldRead(String name) {
-        Class jc = getJavaClass();
+        Class<?> jc = getJavaClass();
         try {
             return jc.getField(name).get(null);
-        } catch (NoSuchFieldException e) {
+        }
+        catch (NoSuchFieldException e) {
             throw new RuntimeException(e.toString());
-        } catch (IllegalAccessException e) {
+        }
+        catch (IllegalAccessException e) {
             throw new RuntimeException(e.toString());
         }
     }
@@ -170,16 +181,18 @@ public class ClassMetaobject implements Serializable {
      * Is invoked when <code>static</code> fields of the base-level
      * class are modified and the runtime system intercepts it.
      * This method simply sets the field to the given value.
-     * <p/>
+     *
      * <p>Every subclass of this class should redefine this method.
      */
     public void trapFieldWrite(String name, Object value) {
-        Class jc = getJavaClass();
+        Class<?> jc = getJavaClass();
         try {
             jc.getField(name).set(null, value);
-        } catch (NoSuchFieldException e) {
+        }
+        catch (NoSuchFieldException e) {
             throw new RuntimeException(e.toString());
-        } catch (IllegalAccessException e) {
+        }
+        catch (IllegalAccessException e) {
             throw new RuntimeException(e.toString());
         }
     }
@@ -188,10 +201,11 @@ public class ClassMetaobject implements Serializable {
      * Invokes a method whose name begins with
      * <code>methodPrefix "_m_"</code> and the identifier.
      *
-     * @throws CannotInvokeException if the invocation fails.
+     * @exception CannotInvokeException         if the invocation fails.
      */
     static public Object invoke(Object target, int identifier, Object[] args)
-            throws Throwable {
+        throws Throwable
+    {
         Method[] allmethods = target.getClass().getMethods();
         int n = allmethods.length;
         String head = methodPrefix + identifier;
@@ -214,17 +228,20 @@ public class ClassMetaobject implements Serializable {
      * class are called and the runtime system intercepts it.
      * This method simply executes the intercepted method invocation
      * with the original parameters and returns the resulting value.
-     * <p/>
+     *
      * <p>Every subclass of this class should redefine this method.
      */
-    public Object trapMethodcall(int identifier, Object[] args)
-            throws Throwable {
+    public Object trapMethodcall(int identifier, Object[] args) 
+        throws Throwable
+    {
         try {
             Method[] m = getReflectiveMethods();
             return m[identifier].invoke(null, args);
-        } catch (java.lang.reflect.InvocationTargetException e) {
+        }
+        catch (java.lang.reflect.InvocationTargetException e) {
             throw e.getTargetException();
-        } catch (java.lang.IllegalAccessException e) {
+        }
+        catch (java.lang.IllegalAccessException e) {
             throw new CannotInvokeException(e);
         }
     }
@@ -237,7 +254,7 @@ public class ClassMetaobject implements Serializable {
         if (methods != null)
             return methods;
 
-        Class baseclass = getJavaClass();
+        Class<?> baseclass = getJavaClass();
         Method[] allmethods = baseclass.getDeclaredMethods();
         int n = allmethods.length;
         int[] index = new int[n];
@@ -247,7 +264,7 @@ public class ClassMetaobject implements Serializable {
             String mname = m.getName();
             if (mname.startsWith(methodPrefix)) {
                 int k = 0;
-                for (int j = methodPrefixLen; ; ++j) {
+                for (int j = methodPrefixLen;; ++j) {
                     char c = mname.charAt(j);
                     if ('0' <= c && c <= '9')
                         k = k * 10 + c - '0';
@@ -272,14 +289,14 @@ public class ClassMetaobject implements Serializable {
     /**
      * Returns the <code>java.lang.reflect.Method</code> object representing
      * the method specified by <code>identifier</code>.
-     * <p/>
+     *
      * <p>Note that the actual method returned will be have an altered,
      * reflective name i.e. <code>_m_2_..</code>.
      *
-     * @param identifier the identifier index
-     *                   given to <code>trapMethodcall()</code> etc.
-     * @see Metaobject#trapMethodcall(int, Object[])
-     * @see #trapMethodcall(int, Object[])
+     * @param identifier        the identifier index
+     *                          given to <code>trapMethodcall()</code> etc.
+     * @see Metaobject#trapMethodcall(int,Object[])
+     * @see #trapMethodcall(int,Object[])
      */
     public final Method getMethod(int identifier) {
         return getReflectiveMethods()[identifier];
@@ -292,7 +309,7 @@ public class ClassMetaobject implements Serializable {
     public final String getMethodName(int identifier) {
         String mname = getReflectiveMethods()[identifier].getName();
         int j = ClassMetaobject.methodPrefixLen;
-        for (; ; ) {
+        for (;;) {
             char c = mname.charAt(j++);
             if (c < '0' || '9' < c)
                 break;
@@ -306,7 +323,7 @@ public class ClassMetaobject implements Serializable {
      * formal parameter types of the method specified
      * by <code>identifier</code>.
      */
-    public final Class[] getParameterTypes(int identifier) {
+    public final Class<?>[] getParameterTypes(int identifier) {
         return getReflectiveMethods()[identifier].getParameterTypes();
     }
 
@@ -314,29 +331,31 @@ public class ClassMetaobject implements Serializable {
      * Returns a <code>Class</code> objects representing the
      * return type of the method specified by <code>identifier</code>.
      */
-    public final Class getReturnType(int identifier) {
+    public final Class<?> getReturnType(int identifier) {
         return getReflectiveMethods()[identifier].getReturnType();
     }
 
     /**
      * Returns the identifier index of the method, as identified by its
      * original name.
-     * <p/>
+     *
      * <p>This method is useful, in conjuction with
-     * <link>ClassMetaobject#getMethod()</link>, to obtain a quick reference
+     * {@link ClassMetaobject#getMethod(int)}, to obtain a quick reference
      * to the original method in the reflected class (i.e. not the proxy
      * method), using the original name of the method.
-     * <p/>
-     * <p>Written by Brett Randall and Shigeru Chiba.
      *
-     * @param originalName The original name of the reflected method
-     * @param argTypes     array of Class specifying the method signature
-     * @return the identifier index of the original method
-     * @throws NoSuchMethodException if the method does not exist
+     * <p>Written by Brett Randall and Shigeru Chiba. 
+     *
+     * @param originalName      The original name of the reflected method
+     * @param argTypes          array of Class specifying the method signature
+     * @return      the identifier index of the original method
+     * @throws NoSuchMethodException    if the method does not exist
+     * 
      * @see ClassMetaobject#getMethod(int)
      */
-    public final int getMethodIndex(String originalName, Class[] argTypes)
-            throws NoSuchMethodException {
+    public final int getMethodIndex(String originalName, Class<?>[] argTypes)
+        throws NoSuchMethodException
+    {
         Method[] mthds = getReflectiveMethods();
         for (int i = 0; i < mthds.length; i++) {
             if (mthds[i] == null)
@@ -344,11 +363,11 @@ public class ClassMetaobject implements Serializable {
 
             // check name and parameter types match
             if (getMethodName(i).equals(originalName)
-                    && Arrays.equals(argTypes, mthds[i].getParameterTypes()))
+                && Arrays.equals(argTypes, mthds[i].getParameterTypes()))
                 return i;
         }
 
         throw new NoSuchMethodException("Method " + originalName
-                + " not found");
+                                        + " not found");
     }
 }

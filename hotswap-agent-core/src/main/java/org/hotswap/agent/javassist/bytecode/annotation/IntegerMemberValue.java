@@ -19,6 +19,9 @@ package org.hotswap.agent.javassist.bytecode.annotation;
 import java.io.IOException;
 import java.lang.reflect.Method;
 
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
+
 /**
  * Integer constant value.
  *
@@ -32,9 +35,9 @@ public class IntegerMemberValue extends MemberValue {
      * Constructs an int constant value.  The initial value is specified
      * by the constant pool entry at the given index.
      *
-     * @param index the index of a CONSTANT_Integer_info structure.
+     * @param index     the index of a CONSTANT_Integer_info structure.
      */
-    public IntegerMemberValue(int index, org.hotswap.agent.javassist.bytecode.ConstPool cp) {
+    public IntegerMemberValue(int index, ConstPool cp) {
         super('I', cp);
         this.valueIndex = index;
     }
@@ -48,9 +51,9 @@ public class IntegerMemberValue extends MemberValue {
      * an index into the constant pool table as the first parameter.
      * Note that the index is also int type.
      *
-     * @param value the initial value.
+     * @param value         the initial value.
      */
-    public IntegerMemberValue(org.hotswap.agent.javassist.bytecode.ConstPool cp, int value) {
+    public IntegerMemberValue(ConstPool cp, int value) {
         super('I', cp);
         setValue(value);
     }
@@ -58,16 +61,18 @@ public class IntegerMemberValue extends MemberValue {
     /**
      * Constructs an int constant value.  The initial value is 0.
      */
-    public IntegerMemberValue(org.hotswap.agent.javassist.bytecode.ConstPool cp) {
+    public IntegerMemberValue(ConstPool cp) {
         super('I', cp);
         setValue(0);
     }
 
-    Object getValue(ClassLoader cl, org.hotswap.agent.javassist.ClassPool cp, Method m) {
-        return new Integer(getValue());
+    @Override
+    Object getValue(ClassLoader cl, ClassPool cp, Method m) {
+        return Integer.valueOf(getValue());
     }
 
-    Class getType(ClassLoader cl) {
+    @Override
+    Class<?> getType(ClassLoader cl) {
         return int.class;
     }
 
@@ -88,6 +93,7 @@ public class IntegerMemberValue extends MemberValue {
     /**
      * Obtains the string representation of this object.
      */
+    @Override
     public String toString() {
         return Integer.toString(getValue());
     }
@@ -95,6 +101,7 @@ public class IntegerMemberValue extends MemberValue {
     /**
      * Writes the value.
      */
+    @Override
     public void write(AnnotationsWriter writer) throws IOException {
         writer.constValueIndex(getValue());
     }
@@ -102,6 +109,7 @@ public class IntegerMemberValue extends MemberValue {
     /**
      * Accepts a visitor.
      */
+    @Override
     public void accept(MemberValueVisitor visitor) {
         visitor.visitIntegerMemberValue(this);
     }

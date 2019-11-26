@@ -16,10 +16,25 @@
 
 package org.hotswap.agent.javassist.tools.rmi;
 
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InvalidClassException;
+import java.io.NotSerializableException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
 import java.util.Vector;
+
+import org.hotswap.agent.javassist.CannotCompileException;
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.NotFoundException;
+import org.hotswap.agent.javassist.tools.web.BadHttpRequest;
+import org.hotswap.agent.javassist.tools.web.Webserver;
 
 /**
  * An AppletServer object is a web server that an ObjectImporter
@@ -28,52 +43,56 @@ import java.util.Vector;
  * If the classes of the exported objects are requested by the client-side
  * JVM, this web server sends proxy classes for the requested classes.
  *
- * @see ObjectImporter
+ * @see javassist.tools.rmi.ObjectImporter
  */
-public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserver {
+public class AppletServer extends Webserver {
     private StubGenerator stubGen;
-    private Hashtable exportedNames;
-    private Vector exportedObjects;
+    private Map<String,ExportedObject> exportedNames;
+    private List<ExportedObject> exportedObjects;
 
     private static final byte[] okHeader
-            = "HTTP/1.0 200 OK\r\n\r\n".getBytes();
+                                = "HTTP/1.0 200 OK\r\n\r\n".getBytes();
 
     /**
      * Constructs a web server.
      *
-     * @param port port number
+     * @param port      port number
      */
     public AppletServer(String port)
-            throws IOException, org.hotswap.agent.javassist.NotFoundException, org.hotswap.agent.javassist.CannotCompileException {
+        throws IOException, NotFoundException, CannotCompileException
+    {
         this(Integer.parseInt(port));
     }
 
     /**
      * Constructs a web server.
      *
-     * @param port port number
+     * @param port      port number
      */
     public AppletServer(int port)
-            throws IOException, org.hotswap.agent.javassist.NotFoundException, org.hotswap.agent.javassist.CannotCompileException {
-        this(org.hotswap.agent.javassist.ClassPool.getDefault(), new StubGenerator(), port);
+        throws IOException, NotFoundException, CannotCompileException
+    {
+        this(ClassPool.getDefault(), new StubGenerator(), port);
     }
 
     /**
      * Constructs a web server.
      *
-     * @param port port number
-     * @param src  the source of classs files.
+     * @param port      port number
+     * @param src       the source of classs files.
      */
-    public AppletServer(int port, org.hotswap.agent.javassist.ClassPool src)
-            throws IOException, org.hotswap.agent.javassist.NotFoundException, org.hotswap.agent.javassist.CannotCompileException {
-        this(new org.hotswap.agent.javassist.ClassPool(src), new StubGenerator(), port);
+    public AppletServer(int port, ClassPool src)
+        throws IOException, NotFoundException, CannotCompileException
+    {
+        this(new ClassPool(src), new StubGenerator(), port);
     }
 
-    private AppletServer(org.hotswap.agent.javassist.ClassPool loader, StubGenerator gen, int port)
-            throws IOException, org.hotswap.agent.javassist.NotFoundException, org.hotswap.agent.javassist.CannotCompileException {
+    private AppletServer(ClassPool loader, StubGenerator gen, int port)
+        throws IOException, NotFoundException, CannotCompileException
+    {
         super(port);
-        exportedNames = new Hashtable();
-        exportedObjects = new Vector();
+        exportedNames = new Hashtable<String,ExportedObject>();
+        exportedObjects = new Vector<ExportedObject>();
         stubGen = gen;
         addTranslator(loader, gen);
     }
@@ -81,6 +100,7 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
     /**
      * Begins the HTTP service.
      */
+    @Override
     public void run() {
         super.run();
     }
@@ -91,26 +111,29 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
      * to access the exported object.  A remote applet can load
      * the proxy class and call a method on the exported object.
      *
-     * @param name the name used for looking the object up.
-     * @param obj  the exported object.
-     * @return the object identifier
-     * @see ObjectImporter#lookupObject(String)
+     * @param name      the name used for looking the object up.
+     * @param obj       the exported object.
+     * @return          the object identifier
+     *
+     * @see javassist.tools.rmi.ObjectImporter#lookupObject(String)
      */
     public synchronized int exportObject(String name, Object obj)
-            throws org.hotswap.agent.javassist.CannotCompileException {
-        Class clazz = obj.getClass();
+        throws CannotCompileException
+    {
+        Class<?> clazz = obj.getClass();
         ExportedObject eo = new ExportedObject();
         eo.object = obj;
         eo.methods = clazz.getMethods();
-        exportedObjects.addElement(eo);
+        exportedObjects.add(eo);
         eo.identifier = exportedObjects.size() - 1;
         if (name != null)
             exportedNames.put(name, eo);
 
         try {
             stubGen.makeProxyClass(clazz);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
+        }
+        catch (NotFoundException e) {
+            throw new CannotCompileException(e);
         }
 
         return eo.identifier;
@@ -119,8 +142,10 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
     /**
      * Processes a request from a web browser (an ObjectImporter).
      */
+    @Override
     public void doReply(InputStream in, OutputStream out, String cmd)
-            throws IOException, org.hotswap.agent.javassist.tools.web.BadHttpRequest {
+        throws IOException, BadHttpRequest
+    {
         if (cmd.startsWith("POST /rmi "))
             processRMI(in, out);
         else if (cmd.startsWith("POST /lookup "))
@@ -130,7 +155,8 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
     }
 
     private void processRMI(InputStream ins, OutputStream outs)
-            throws IOException {
+        throws IOException
+    {
         ObjectInputStream in = new ObjectInputStream(ins);
 
         int objectId = in.readInt();
@@ -138,12 +164,12 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
         Exception err = null;
         Object rvalue = null;
         try {
-            ExportedObject eo
-                    = (ExportedObject) exportedObjects.elementAt(objectId);
+            ExportedObject eo = exportedObjects.get(objectId);
             Object[] args = readParameters(in);
             rvalue = convertRvalue(eo.methods[methodId].invoke(eo.object,
-                    args));
-        } catch (Exception e) {
+                                                               args));
+        }
+        catch(Exception e) {
             err = e;
             logging2(e.toString());
         }
@@ -153,13 +179,16 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
         if (err != null) {
             out.writeBoolean(false);
             out.writeUTF(err.toString());
-        } else
+        }
+        else
             try {
                 out.writeBoolean(true);
                 out.writeObject(rvalue);
-            } catch (NotSerializableException e) {
+            }
+            catch (NotSerializableException e) {
                 logging2(e.toString());
-            } catch (InvalidClassException e) {
+            }
+            catch (InvalidClassException e) {
                 logging2(e.toString());
             }
 
@@ -169,15 +198,15 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
     }
 
     private Object[] readParameters(ObjectInputStream in)
-            throws IOException, ClassNotFoundException {
+        throws IOException, ClassNotFoundException
+    {
         int n = in.readInt();
         Object[] args = new Object[n];
         for (int i = 0; i < n; ++i) {
             Object a = in.readObject();
             if (a instanceof RemoteRef) {
-                RemoteRef ref = (RemoteRef) a;
-                ExportedObject eo
-                        = (ExportedObject) exportedObjects.elementAt(ref.oid);
+                RemoteRef ref = (RemoteRef)a;
+                ExportedObject eo = exportedObjects.get(ref.oid);
                 a = eo.object;
             }
 
@@ -188,29 +217,31 @@ public class AppletServer extends org.hotswap.agent.javassist.tools.web.Webserve
     }
 
     private Object convertRvalue(Object rvalue)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+        throws CannotCompileException
+    {
         if (rvalue == null)
             return null;        // the return type is void.
 
         String classname = rvalue.getClass().getName();
         if (stubGen.isProxyClass(classname))
             return new RemoteRef(exportObject(null, rvalue), classname);
-        else
-            return rvalue;
+        return rvalue;
     }
 
     private void lookupName(String cmd, InputStream ins, OutputStream outs)
-            throws IOException {
+        throws IOException
+    {
         ObjectInputStream in = new ObjectInputStream(ins);
         String name = DataInputStream.readUTF(in);
-        ExportedObject found = (ExportedObject) exportedNames.get(name);
+        ExportedObject found = exportedNames.get(name);
         outs.write(okHeader);
         ObjectOutputStream out = new ObjectOutputStream(outs);
         if (found == null) {
             logging2(name + "not found.");
             out.writeInt(-1);           // error code
             out.writeUTF("error");
-        } else {
+        }
+        else {
             logging2(name);
             out.writeInt(found.identifier);
             out.writeUTF(found.object.getClass().getName());

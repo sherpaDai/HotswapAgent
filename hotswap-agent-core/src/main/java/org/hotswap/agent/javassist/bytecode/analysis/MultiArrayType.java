@@ -15,6 +15,10 @@
  */
 package org.hotswap.agent.javassist.bytecode.analysis;
 
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.CtClass;
+import org.hotswap.agent.javassist.NotFoundException;
+
 /**
  * Represents an array of {@link MultiType} instances.
  *
@@ -30,50 +34,58 @@ public class MultiArrayType extends Type {
         this.dims = dims;
     }
 
-    public org.hotswap.agent.javassist.CtClass getCtClass() {
-        org.hotswap.agent.javassist.CtClass clazz = component.getCtClass();
+    @Override
+    public CtClass getCtClass() {
+        CtClass clazz = component.getCtClass();
         if (clazz == null)
             return null;
 
-        org.hotswap.agent.javassist.ClassPool pool = clazz.getClassPool();
+        ClassPool pool = clazz.getClassPool();
         if (pool == null)
-            pool = org.hotswap.agent.javassist.ClassPool.getDefault();
+            pool = ClassPool.getDefault();
 
         String name = arrayName(clazz.getName(), dims);
 
         try {
             return pool.get(name);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        } catch (NotFoundException e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     boolean popChanged() {
         return component.popChanged();
     }
 
+    @Override
     public int getDimensions() {
         return dims;
     }
 
+    @Override
     public Type getComponent() {
-        return dims == 1 ? (Type) component : new MultiArrayType(component, dims - 1);
+       return dims == 1 ? (Type)component : new MultiArrayType(component, dims - 1);
     }
 
+    @Override
     public int getSize() {
         return 1;
     }
 
+    @Override
     public boolean isArray() {
         return true;
     }
 
+    @Override
     public boolean isAssignableFrom(Type type) {
         throw new UnsupportedOperationException("Not implemented");
     }
 
+    @Override
     public boolean isReference() {
-        return true;
+       return true;
     }
 
     public boolean isAssignableTo(Type type) {
@@ -86,7 +98,7 @@ public class MultiArrayType extends Type {
         if (eq(type.getCtClass(), Type.SERIALIZABLE.getCtClass()))
             return true;
 
-        if (!type.isArray())
+        if (! type.isArray())
             return false;
 
         Type typeRoot = getRootComponent(type);
@@ -111,14 +123,22 @@ public class MultiArrayType extends Type {
         return component.isAssignableTo(typeRoot);
     }
 
+
+    @Override
+    public int hashCode() {
+        return component.hashCode() + dims;
+    }
+
+    @Override
     public boolean equals(Object o) {
-        if (!(o instanceof MultiArrayType))
+        if (! (o instanceof MultiArrayType))
             return false;
-        MultiArrayType multi = (MultiArrayType) o;
+        MultiArrayType multi = (MultiArrayType)o;
 
         return component.equals(multi.component) && dims == multi.dims;
     }
 
+    @Override
     public String toString() {
         // follows the same detailed formating scheme as component
         return arrayName(component.toString(), dims);

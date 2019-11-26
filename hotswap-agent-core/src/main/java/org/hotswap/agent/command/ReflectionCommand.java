@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.command;
 
 import org.hotswap.agent.config.PluginManager;
@@ -37,7 +55,7 @@ public class ReflectionCommand extends MergeableCommand {
      * For norma use (call application classloader from plugin class) this means that you can use only
      * Java default types.
      */
-    private List<Object> params = new ArrayList<Object>();
+    private List<Object> params = new ArrayList<>();
 
     /**
      * Plugin object to resolve target classloader (if not set directly). May be null.
@@ -79,6 +97,7 @@ public class ReflectionCommand extends MergeableCommand {
      */
     public ReflectionCommand(Object target, String methodName, Object... params) {
         this.target = target;
+        this.className = target == null ? "NULL" : target.getClass().getName();
         this.methodName = methodName;
         this.params = Arrays.asList(params);
     }
@@ -176,7 +195,7 @@ public class ReflectionCommand extends MergeableCommand {
         Class[] paramTypes = new Class[params.size()];
         int i = 0;
         for (Object param : params) {
-            if (params == null)
+            if (param == null)
                 throw new IllegalArgumentException("Cannot execute for null parameter value");
             else {
                 paramTypes[i++] = param.getClass();
@@ -208,9 +227,9 @@ public class ReflectionCommand extends MergeableCommand {
     @Override
     public int hashCode() {
         int result = target != null ? target.hashCode() : 0;
-        result = 31 * result + className.hashCode();
-        result = 31 * result + methodName.hashCode();
-        result = 31 * result + params.hashCode();
+        result = 31 * result + (className != null ? className.hashCode() : 0);
+        result = 31 * result + (methodName != null ? methodName.hashCode() : 0);
+        result = 31 * result + (params != null ? params.hashCode() : 0);
         result = 31 * result + (plugin != null ? plugin.hashCode() : 0);
         result = 31 * result + (targetClassLoader != null ? targetClassLoader.hashCode() : 0);
         return result;

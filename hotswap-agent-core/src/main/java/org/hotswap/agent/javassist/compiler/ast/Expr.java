@@ -16,6 +16,7 @@
 
 package org.hotswap.agent.javassist.compiler.ast;
 
+import org.hotswap.agent.javassist.compiler.CompileError;
 import org.hotswap.agent.javassist.compiler.TokenId;
 
 /**
@@ -28,6 +29,8 @@ public class Expr extends ASTList implements TokenId {
      * Otherwise, the object should be an instance of a subclass.
      */
 
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     protected int operatorId;
 
     Expr(int op, ASTree _head, ASTList _tail) {
@@ -48,38 +51,29 @@ public class Expr extends ASTList implements TokenId {
         return new Expr(op, oprand1);
     }
 
-    public int getOperator() {
-        return operatorId;
-    }
+    public int getOperator() { return operatorId; }
 
-    public void setOperator(int op) {
-        operatorId = op;
-    }
+    public void setOperator(int op) { operatorId = op; }
 
-    public ASTree oprand1() {
-        return getLeft();
-    }
+    public ASTree oprand1() { return getLeft(); }
 
     public void setOprand1(ASTree expr) {
         setLeft(expr);
     }
 
-    public ASTree oprand2() {
-        return getRight().getLeft();
-    }
+    public ASTree oprand2() { return getRight().getLeft(); }
 
     public void setOprand2(ASTree expr) {
         getRight().setLeft(expr);
     }
 
-    public void accept(Visitor v) throws org.hotswap.agent.javassist.compiler.CompileError {
-        v.atExpr(this);
-    }
+    @Override
+    public void accept(Visitor v) throws CompileError { v.atExpr(this); }
 
     public String getName() {
         int id = operatorId;
         if (id < 128)
-            return String.valueOf((char) id);
+            return String.valueOf((char)id);
         else if (NEQ <= id && id <= ARSHIFT_E)
             return opNames[id - NEQ];
         else if (id == INSTANCEOF)
@@ -88,6 +82,7 @@ public class Expr extends ASTList implements TokenId {
             return String.valueOf(id);
     }
 
+    @Override
     protected String getTag() {
         return "op:" + getName();
     }

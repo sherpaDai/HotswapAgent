@@ -1,10 +1,27 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.owb.testBeansHotswap;
 
 import javax.enterprise.inject.Alternative;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import org.hotswap.agent.plugin.owb.testBeans.ChangedHelloProducer;
 import org.hotswap.agent.plugin.owb.testBeans.HelloService;
 
 /**
@@ -16,17 +33,17 @@ public class HelloServiceImpl2 implements HelloService {
     String name;
 
     @Inject
-    ChangedHelloProducer helloChanged;
+    HelloProducer2 helloProducer;
 
     public String hello() {
-        return name + ":" + helloChanged.hello();
+        return name + ":" + helloProducer.hello();
     }
 
     public String helloNewMethod() {
-        return "Hello from helloNewMethod";
+        return "HelloServiceImpl2.helloNewMethod()";
     }
 
-    public void initName(){
-        this.name = "Service2";
+    public void initName() {
+        this.name = "HelloServiceImpl2.hello(initialized)";
     }
 }

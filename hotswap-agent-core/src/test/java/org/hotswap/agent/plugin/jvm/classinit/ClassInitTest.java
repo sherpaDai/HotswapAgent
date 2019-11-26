@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.jvm.classinit;
 
 import static org.junit.Assert.assertEquals;
@@ -19,10 +37,13 @@ public class ClassInitTest {
         swapClasses(StaticTest1.class, StaticTest2.class.getName());
         assertEquals(ReflectionHelper.get(o, "int1"), StaticTest1.int1); // must have original value (10)
         assertEquals(ReflectionHelper.get(o, "int2"), StaticTest2.int2); // must have new value (20)
+        assertEquals(ReflectionHelper.get(o, "int3"), StaticTest2.int3); // must have new value (20)
         assertEquals(ReflectionHelper.get(o, "str1"), StaticTest1.str1); // must have original value ("str1")
         assertEquals(ReflectionHelper.get(o, "str2"), StaticTest2.str2); // must have new value  ("str2")
+        assertEquals(ReflectionHelper.get(o, "str3"), StaticTest2.str3); // must have new value  ("str2")
         assertEquals(ReflectionHelper.get(o, "obj1"), StaticTest1.obj1); // must have original value ("obj1")
         assertEquals(ReflectionHelper.get(o, "obj2"), StaticTest2.obj2); // must have new value ("obj2")
+        assertEquals(ReflectionHelper.get(o, "obj3"), StaticTest2.obj3); // must have new value ("obj2")
     }
 
 //    @Test

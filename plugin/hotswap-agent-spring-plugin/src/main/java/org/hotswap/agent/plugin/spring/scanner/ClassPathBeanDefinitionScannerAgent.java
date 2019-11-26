@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.spring.scanner;
 
 import java.io.IOException;
@@ -42,7 +60,7 @@ import org.springframework.core.type.classreading.MetadataReaderFactory;
 public class ClassPathBeanDefinitionScannerAgent {
     private static AgentLogger LOGGER = AgentLogger.getLogger(ClassPathBeanDefinitionScannerAgent.class);
 
-    private static Map<ClassPathBeanDefinitionScanner, ClassPathBeanDefinitionScannerAgent> instances = new HashMap<ClassPathBeanDefinitionScanner, ClassPathBeanDefinitionScannerAgent>();
+    private static Map<ClassPathBeanDefinitionScanner, ClassPathBeanDefinitionScannerAgent> instances = new HashMap<>();
 
     /**
      * Flag to check reload status.
@@ -55,7 +73,7 @@ public class ClassPathBeanDefinitionScannerAgent {
     ClassPathBeanDefinitionScanner scanner;
 
     // list of basePackages registered with target scanner
-    Set<String> basePackages = new HashSet<String>();
+    Set<String> basePackages = new HashSet<>();
 
     // registry obtained from the scanner
     BeanDefinitionRegistry registry;
@@ -68,11 +86,14 @@ public class ClassPathBeanDefinitionScannerAgent {
 
     /**
      * Return an agent instance for a scanner. If the instance does not exists yet, it is created.
+     *
      * @param scanner the scanner
      * @return agent instance
      */
     public static ClassPathBeanDefinitionScannerAgent getInstance(ClassPathBeanDefinitionScanner scanner) {
-        if (!instances.containsKey(scanner)) {
+        ClassPathBeanDefinitionScannerAgent classPathBeanDefinitionScannerAgent = instances.get(scanner);
+        // registry may be different if there is multiple app. (this is just a temporary solution)
+        if (classPathBeanDefinitionScannerAgent == null || classPathBeanDefinitionScannerAgent.registry != scanner.getRegistry()) {
             instances.put(scanner, new ClassPathBeanDefinitionScannerAgent(scanner));
         }
         return instances.get(scanner);
@@ -103,6 +124,7 @@ public class ClassPathBeanDefinitionScannerAgent {
 
     /**
      * Initialize base package from ClassPathBeanDefinitionScanner.scan() (hooked by a Transformer)
+     *
      * @param basePackage package that Spring will scan
      */
     public void registerBasePackage(String basePackage) {
@@ -115,7 +137,7 @@ public class ClassPathBeanDefinitionScannerAgent {
     /**
      * Called by a reflection command from SpringPlugin transformer.
      *
-     * @param basePackage base package on witch the transformer was registered, used to obtain associated scanner.
+     * @param basePackage     base package on witch the transformer was registered, used to obtain associated scanner.
      * @param classDefinition new class definition
      * @throws IOException error working with classDefinition
      */
@@ -144,9 +166,11 @@ public class ClassPathBeanDefinitionScannerAgent {
      */
     public void defineBean(BeanDefinition candidate) {
         synchronized (getClass()) { // TODO sychronize on DefaultListableFactory.beanDefinitionMap?
+
             ScopeMetadata scopeMetadata = this.scopeMetadataResolver.resolveScopeMetadata(candidate);
             candidate.setScope(scopeMetadata.getScopeName());
             String beanName = this.beanNameGenerator.generateBeanName(candidate, registry);
+
             if (candidate instanceof AbstractBeanDefinition) {
                 postProcessBeanDefinition((AbstractBeanDefinition) candidate, beanName);
             }
@@ -155,47 +179,51 @@ public class ClassPathBeanDefinitionScannerAgent {
             }
 
             removeIfExists(beanName);
-
             if (checkCandidate(beanName, candidate)) {
+
                 BeanDefinitionHolder definitionHolder = new BeanDefinitionHolder(candidate, beanName);
                 definitionHolder = applyScopedProxyMode(scopeMetadata, definitionHolder, registry);
 
                 LOGGER.reload("Registering Spring bean '{}'", beanName);
                 LOGGER.debug("Bean definition '{}'", beanName, candidate);
                 registerBeanDefinition(definitionHolder, registry);
-                
+
                 DefaultListableBeanFactory bf = maybeRegistryToBeanFactory();
                 if (bf != null)
-                	ResetRequestMappingCaches.reset(bf);
-                
+                    ResetRequestMappingCaches.reset(bf);
+
+                ProxyReplacer.clearAllProxies();
                 freezeConfiguration();
             }
-
-			ProxyReplacer.clearAllProxies();
         }
+
 
     }
 
     /**
      * If registry contains the bean, remove it first (destroying existing singletons).
+     *
      * @param beanName name of the bean
      */
     private void removeIfExists(String beanName) {
         if (registry.containsBeanDefinition(beanName)) {
             LOGGER.debug("Removing bean definition '{}'", beanName);
+            DefaultListableBeanFactory bf = maybeRegistryToBeanFactory();
+            if (bf != null) {
+                ResetRequestMappingCaches.reset(bf);
+            }
             registry.removeBeanDefinition(beanName);
 
             ResetSpringStaticCaches.reset();
-            DefaultListableBeanFactory bf = maybeRegistryToBeanFactory();
             if (bf != null) {
-            	ResetBeanPostProcessorCaches.reset(bf);
+                ResetBeanPostProcessorCaches.reset(bf);
             }
         }
     }
-    
+
     private DefaultListableBeanFactory maybeRegistryToBeanFactory() {
         if (registry instanceof DefaultListableBeanFactory) {
-            return (DefaultListableBeanFactory)registry;
+            return (DefaultListableBeanFactory) registry;
         } else if (registry instanceof GenericApplicationContext) {
             return ((GenericApplicationContext) registry).getDefaultListableBeanFactory();
         }
@@ -205,7 +233,7 @@ public class ClassPathBeanDefinitionScannerAgent {
     // rerun freez configuration - this method is enhanced with cache reset
     private void freezeConfiguration() {
         if (registry instanceof DefaultListableBeanFactory) {
-            ((DefaultListableBeanFactory)registry).freezeConfiguration();
+            ((DefaultListableBeanFactory) registry).freezeConfiguration();
         } else if (registry instanceof GenericApplicationContext) {
             (((GenericApplicationContext) registry).getDefaultListableBeanFactory()).freezeConfiguration();
         }
@@ -222,6 +250,7 @@ public class ClassPathBeanDefinitionScannerAgent {
         Resource resource = new ByteArrayResource(bytes);
         resetCachingMetadataReaderFactoryCache();
         MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(resource);
+
         if (isCandidateComponent(metadataReader)) {
             ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
             sbd.setResource(resource);
@@ -247,7 +276,7 @@ public class ClassPathBeanDefinitionScannerAgent {
     private void resetCachingMetadataReaderFactoryCache() {
         if (getMetadataReaderFactory() instanceof CachingMetadataReaderFactory) {
             Map metadataReaderCache = (Map) ReflectionHelper.getNoException(getMetadataReaderFactory(),
-                        CachingMetadataReaderFactory.class, "metadataReaderCache");
+                    CachingMetadataReaderFactory.class, "metadataReaderCache");
 
             if (metadataReaderCache == null)
                 metadataReaderCache = (Map) ReflectionHelper.getNoException(getMetadataReaderFactory(),

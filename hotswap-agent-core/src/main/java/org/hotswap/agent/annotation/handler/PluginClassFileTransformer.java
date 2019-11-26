@@ -1,8 +1,25 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.annotation.handler;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.reflect.InvocationTargetException;
 import java.security.ProtectionDomain;
@@ -20,9 +37,10 @@ import org.hotswap.agent.javassist.LoaderClassPath;
 import org.hotswap.agent.javassist.NotFoundException;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.util.AppClassLoaderExecutor;
+import org.hotswap.agent.util.HaClassFileTransformer;
 import org.hotswap.agent.versions.DeploymentInfo;
 
-public class PluginClassFileTransformer implements ClassFileTransformer {
+public class PluginClassFileTransformer implements HaClassFileTransformer {
     protected static AgentLogger LOGGER = AgentLogger.getLogger(PluginClassFileTransformer.class);
 
 
@@ -41,6 +59,11 @@ public class PluginClassFileTransformer implements ClassFileTransformer {
         this.events = Arrays.asList(onClassLoadAnnotation.events());
     }
 
+    @Override
+    public boolean isForRedefinitionOnly() {
+        return !events.contains(LoadEvent.DEFINE);
+    }
+
     public boolean isPluginDisabled(ClassLoader loader){
         if(loader != null && pluginManager != null && pluginManager.getPluginConfiguration(loader) != null) {
             return pluginManager.getPluginConfiguration(loader).isDisabledPlugin(pluginAnnotation.getPluginClass());
@@ -48,15 +71,19 @@ public class PluginClassFileTransformer implements ClassFileTransformer {
         // can't tell
         return false;
     }
-    
+
     public boolean shouldCheckVersion(){
         return pluginAnnotation.shouldCheckVersion();
     }
-    
-    public boolean isDefaultPlugin(){
+
+    public boolean isFallbackPlugin(){
         return pluginAnnotation.isFallBack();
     }
-    
+
+    public String getPluginGroup() {
+        return pluginAnnotation.getGroup();
+    }
+
     public boolean versionMatches(ClassLoader loader){
         if (pluginAnnotation.shouldCheckVersion()) {
             DeploymentInfo info = DeploymentInfo.fromClassLoader(loader);
@@ -67,7 +94,7 @@ public class PluginClassFileTransformer implements ClassFileTransformer {
         }
         return true;
     }
-    
+
     @Override
     public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
         if ((classBeingRedefined == null) ? !events.contains(LoadEvent.DEFINE) : !events.contains(LoadEvent.REDEFINE)) {
@@ -84,8 +111,8 @@ public class PluginClassFileTransformer implements ClassFileTransformer {
 
         return transform(pluginManager, pluginAnnotation, loader, className, classBeingRedefined, protectionDomain, classfileBuffer);
     }
-    
-    
+
+
     @Override
     public String toString() {
         return "\n\t\t\tPluginClassFileTransformer [pluginAnnotation=" + pluginAnnotation + "]";
@@ -112,7 +139,9 @@ public class PluginClassFileTransformer implements ClassFileTransformer {
      * Skip proxy and javassist synthetic classes.
      */
     protected static boolean isSyntheticClass(String className) {
-        return className.contains("$$_javassist") || className.startsWith("com/sun/proxy");
+        return className.contains("$$_javassist")
+                || className.contains("$$_jvst")
+                || className.startsWith("com/sun/proxy");
     }
 
     /**
@@ -149,7 +178,7 @@ public class PluginClassFileTransformer implements ClassFileTransformer {
         // after invocation.
         CtClass ctClass = null;
 
-        List<Object> args = new ArrayList<Object>();
+        List<Object> args = new ArrayList<>();
         for (Class<?> type : pluginAnnotation.getMethod().getParameterTypes()) {
             if (type.isAssignableFrom(ClassLoader.class)) {
                 args.add(classLoader);

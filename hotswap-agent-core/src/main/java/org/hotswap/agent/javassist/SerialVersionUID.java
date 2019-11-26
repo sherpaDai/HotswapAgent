@@ -25,6 +25,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import org.hotswap.agent.javassist.bytecode.ClassFile;
+import org.hotswap.agent.javassist.bytecode.Descriptor;
+
 /**
  * Utility for calculating serialVersionUIDs for Serializable classes.
  *
@@ -37,52 +40,57 @@ public class SerialVersionUID {
      * Adds serialVersionUID if one does not already exist. Call this before
      * modifying a class to maintain serialization compatability.
      */
-    public static void setSerialVersionUID(org.hotswap.agent.javassist.CtClass clazz)
-            throws org.hotswap.agent.javassist.CannotCompileException, NotFoundException {
+    public static void setSerialVersionUID(CtClass clazz)
+        throws CannotCompileException, NotFoundException
+    {
         // check for pre-existing field.
         try {
             clazz.getDeclaredField("serialVersionUID");
             return;
-        } catch (NotFoundException e) {
         }
+        catch (NotFoundException e) {}
 
         // check if the class is serializable.
         if (!isSerializable(clazz))
             return;
-
+            
         // add field with default value.
-        org.hotswap.agent.javassist.CtField field = new org.hotswap.agent.javassist.CtField(org.hotswap.agent.javassist.CtClass.longType, "serialVersionUID",
-                clazz);
+        CtField field = new CtField(CtClass.longType, "serialVersionUID",
+                                    clazz);
         field.setModifiers(Modifier.PRIVATE | Modifier.STATIC |
-                Modifier.FINAL);
+                           Modifier.FINAL);
         clazz.addField(field, calculateDefault(clazz) + "L");
     }
 
     /**
      * Does the class implement Serializable?
      */
-    private static boolean isSerializable(org.hotswap.agent.javassist.CtClass clazz)
-            throws NotFoundException {
+    private static boolean isSerializable(CtClass clazz) 
+        throws NotFoundException
+    {
         ClassPool pool = clazz.getClassPool();
         return clazz.subtypeOf(pool.get("java.io.Serializable"));
     }
-
+    
     /**
      * Calculate default value. See Java Serialization Specification, Stream
      * Unique Identifiers.
+     *
+     * @since 3.20
      */
-    static long calculateDefault(org.hotswap.agent.javassist.CtClass clazz)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+    public static long calculateDefault(CtClass clazz)
+        throws CannotCompileException
+    {
         try {
             ByteArrayOutputStream bout = new ByteArrayOutputStream();
             DataOutputStream out = new DataOutputStream(bout);
-            org.hotswap.agent.javassist.bytecode.ClassFile classFile = clazz.getClassFile();
-
+            ClassFile classFile = clazz.getClassFile();
+            
             // class name.
             String javaName = javaName(clazz);
             out.writeUTF(javaName);
 
-            org.hotswap.agent.javassist.CtMethod[] methods = clazz.getDeclaredMethods();
+            CtMethod[] methods = clazz.getDeclaredMethods();
 
             // class modifiers.
             int classMods = clazz.getModifiers();
@@ -102,22 +110,21 @@ public class SerialVersionUID {
             Arrays.sort(interfaces);
             for (int i = 0; i < interfaces.length; i++)
                 out.writeUTF(interfaces[i]);
-
+            
             // fields.
-            org.hotswap.agent.javassist.CtField[] fields = clazz.getDeclaredFields();
-            Arrays.sort(fields, new Comparator() {
-                public int compare(Object o1, Object o2) {
-                    org.hotswap.agent.javassist.CtField field1 = (org.hotswap.agent.javassist.CtField) o1;
-                    org.hotswap.agent.javassist.CtField field2 = (org.hotswap.agent.javassist.CtField) o2;
+            CtField[] fields = clazz.getDeclaredFields();
+            Arrays.sort(fields, new Comparator<CtField>() {
+                @Override
+                public int compare(CtField field1, CtField field2) {
                     return field1.getName().compareTo(field2.getName());
                 }
             });
 
             for (int i = 0; i < fields.length; i++) {
-                org.hotswap.agent.javassist.CtField field = (org.hotswap.agent.javassist.CtField) fields[i];
+                CtField field = fields[i]; 
                 int mods = field.getModifiers();
                 if (((mods & Modifier.PRIVATE) == 0) ||
-                        ((mods & (Modifier.STATIC | Modifier.TRANSIENT)) == 0)) {
+                    ((mods & (Modifier.STATIC | Modifier.TRANSIENT)) == 0)) {
                     out.writeUTF(field.getName());
                     out.writeInt(mods);
                     out.writeUTF(field.getFieldInfo2().getDescriptor());
@@ -133,12 +140,11 @@ public class SerialVersionUID {
 
             // constructors.
             CtConstructor[] constructors = clazz.getDeclaredConstructors();
-            Arrays.sort(constructors, new Comparator() {
-                public int compare(Object o1, Object o2) {
-                    CtConstructor c1 = (CtConstructor) o1;
-                    CtConstructor c2 = (CtConstructor) o2;
+            Arrays.sort(constructors, new Comparator<CtConstructor>() {
+                @Override
+                public int compare(CtConstructor c1, CtConstructor c2) {
                     return c1.getMethodInfo2().getDescriptor().compareTo(
-                            c2.getMethodInfo2().getDescriptor());
+                                        c2.getMethodInfo2().getDescriptor());
                 }
             });
 
@@ -149,36 +155,35 @@ public class SerialVersionUID {
                     out.writeUTF("<init>");
                     out.writeInt(mods);
                     out.writeUTF(constructor.getMethodInfo2()
-                            .getDescriptor().replace('/', '.'));
+                                 .getDescriptor().replace('/', '.'));
                 }
             }
 
             // methods.
-            Arrays.sort(methods, new Comparator() {
-                public int compare(Object o1, Object o2) {
-                    org.hotswap.agent.javassist.CtMethod m1 = (org.hotswap.agent.javassist.CtMethod) o1;
-                    org.hotswap.agent.javassist.CtMethod m2 = (org.hotswap.agent.javassist.CtMethod) o2;
+            Arrays.sort(methods, new Comparator<CtMethod>() {
+                @Override
+                public int compare(CtMethod m1, CtMethod m2) {
                     int value = m1.getName().compareTo(m2.getName());
                     if (value == 0)
                         value = m1.getMethodInfo2().getDescriptor()
-                                .compareTo(m2.getMethodInfo2().getDescriptor());
+                            .compareTo(m2.getMethodInfo2().getDescriptor());
 
                     return value;
                 }
             });
 
             for (int i = 0; i < methods.length; i++) {
-                org.hotswap.agent.javassist.CtMethod method = methods[i];
+                CtMethod method = methods[i];
                 int mods = method.getModifiers()
-                        & (Modifier.PUBLIC | Modifier.PRIVATE
-                        | Modifier.PROTECTED | Modifier.STATIC
-                        | Modifier.FINAL | Modifier.SYNCHRONIZED
-                        | Modifier.NATIVE | Modifier.ABSTRACT | Modifier.STRICT);
+                           & (Modifier.PUBLIC | Modifier.PRIVATE
+                              | Modifier.PROTECTED | Modifier.STATIC
+                              | Modifier.FINAL | Modifier.SYNCHRONIZED
+                              | Modifier.NATIVE | Modifier.ABSTRACT | Modifier.STRICT);
                 if ((mods & Modifier.PRIVATE) == 0) {
                     out.writeUTF(method.getName());
                     out.writeInt(mods);
                     out.writeUTF(method.getMethodInfo2()
-                            .getDescriptor().replace('/', '.'));
+                                 .getDescriptor().replace('/', '.'));
                 }
             }
 
@@ -191,18 +196,20 @@ public class SerialVersionUID {
                 hash = (hash << 8) | (digested[i] & 0xFF);
 
             return hash;
-        } catch (IOException e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
-        } catch (NoSuchAlgorithmException e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
+        }
+        catch (IOException e) {
+            throw new CannotCompileException(e);
+        }
+        catch (NoSuchAlgorithmException e) {
+            throw new CannotCompileException(e);
         }
     }
 
-    private static String javaName(org.hotswap.agent.javassist.CtClass clazz) {
-        return org.hotswap.agent.javassist.bytecode.Descriptor.toJavaName(org.hotswap.agent.javassist.bytecode.Descriptor.toJvmName(clazz));
+    private static String javaName(CtClass clazz) {
+        return Descriptor.toJavaName(Descriptor.toJvmName(clazz));
     }
 
     private static String javaName(String name) {
-        return org.hotswap.agent.javassist.bytecode.Descriptor.toJavaName(org.hotswap.agent.javassist.bytecode.Descriptor.toJvmName(name));
+        return Descriptor.toJavaName(Descriptor.toJvmName(name));
     }
 }

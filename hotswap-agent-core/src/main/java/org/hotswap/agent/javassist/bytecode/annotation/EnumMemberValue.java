@@ -16,11 +16,12 @@
 
 package org.hotswap.agent.javassist.bytecode.annotation;
 
-import org.hotswap.agent.javassist.bytecode.ConstPool;
-import org.hotswap.agent.javassist.bytecode.Descriptor;
-
 import java.io.IOException;
 import java.lang.reflect.Method;
+
+import org.hotswap.agent.javassist.ClassPool;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
+import org.hotswap.agent.javassist.bytecode.Descriptor;
 
 /**
  * Enum constant value.
@@ -35,10 +36,10 @@ public class EnumMemberValue extends MemberValue {
      * Constructs an enum constant value.  The initial value is specified
      * by the constant pool entries at the given indexes.
      *
-     * @param type  the index of a CONSTANT_Utf8_info structure
-     *              representing the enum type.
-     * @param value the index of a CONSTANT_Utf8_info structure.
-     *              representing the enum value.
+     * @param type      the index of a CONSTANT_Utf8_info structure
+     *                  representing the enum type.
+     * @param value     the index of a CONSTANT_Utf8_info structure.
+     *                  representing the enum value.
      */
     public EnumMemberValue(int type, int value, ConstPool cp) {
         super('e', cp);
@@ -55,18 +56,23 @@ public class EnumMemberValue extends MemberValue {
         typeIndex = valueIndex = 0;
     }
 
-    Object getValue(ClassLoader cl, org.hotswap.agent.javassist.ClassPool cp, Method m)
-            throws ClassNotFoundException {
+    @Override
+    Object getValue(ClassLoader cl, ClassPool cp, Method m)
+        throws ClassNotFoundException
+    {
         try {
             return getType(cl).getField(getValue()).get(null);
-        } catch (NoSuchFieldException e) {
+        }
+        catch (NoSuchFieldException e) {
             throw new ClassNotFoundException(getType() + "." + getValue());
-        } catch (IllegalAccessException e) {
+        }
+        catch (IllegalAccessException e) {
             throw new ClassNotFoundException(getType() + "." + getValue());
         }
     }
 
-    Class getType(ClassLoader cl) throws ClassNotFoundException {
+    @Override
+    Class<?> getType(ClassLoader cl) throws ClassNotFoundException {
         return loadClass(cl, getType());
     }
 
@@ -102,6 +108,7 @@ public class EnumMemberValue extends MemberValue {
         valueIndex = cp.addUtf8Info(name);
     }
 
+    @Override
     public String toString() {
         return getType() + "." + getValue();
     }
@@ -109,6 +116,7 @@ public class EnumMemberValue extends MemberValue {
     /**
      * Writes the value.
      */
+    @Override
     public void write(AnnotationsWriter writer) throws IOException {
         writer.enumConstValue(cp.getUtf8Info(typeIndex), getValue());
     }
@@ -116,7 +124,8 @@ public class EnumMemberValue extends MemberValue {
     /**
      * Accepts a visitor.
      */
-    public void accept(org.hotswap.agent.javassist.bytecode.annotation.MemberValueVisitor visitor) {
+    @Override
+    public void accept(MemberValueVisitor visitor) {
         visitor.visitEnumMemberValue(this);
     }
 }

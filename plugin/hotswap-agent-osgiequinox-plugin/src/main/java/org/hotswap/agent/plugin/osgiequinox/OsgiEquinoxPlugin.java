@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.osgiequinox;
 
 import java.io.File;
@@ -35,12 +53,12 @@ import org.hotswap.agent.watch.WatchFileEvent;
 import org.hotswap.agent.watch.Watcher;
 
 /**
- * OSGI Equinox hotswap plugin. It watches class changes on extraClasspath and loads changed classes into appropriate equinox class loaders
+ * OSGI Equinox hotswap plugin. Watch class changes on extraClasspath and load modified classes into appropriate equinox class loader
  *
  * @author Vladimir Dvorak
  */
 @Plugin(name = "OsgiEquinox",
-        description = "Supports hotswapping in OSGI/Equinox class loaders therefore it can be used for hotswap in Eclipse RCP plugin development. ",
+        description = "Supports hotswapping in OSGI/Equinox class loader so it can be used for hotswap support in Eclipse RCP plugin development. ",
         testedVersions = {""},
         expectedVersions = {""})
 public class OsgiEquinoxPlugin {
@@ -60,7 +78,7 @@ public class OsgiEquinoxPlugin {
     Watcher watcher;
 
     // synchronize on this map to wait for previous processing
-    final Map<Class<?>, byte[]> reloadMap = new HashMap<Class<?>, byte[]>();
+    final Map<Class<?>, byte[]> reloadMap = new HashMap<>();
 
     private AutoHotswapPathEventListener listener;
 

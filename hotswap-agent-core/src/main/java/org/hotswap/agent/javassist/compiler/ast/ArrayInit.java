@@ -16,19 +16,22 @@
 
 package org.hotswap.agent.javassist.compiler.ast;
 
+import org.hotswap.agent.javassist.compiler.CompileError;
+
 /**
  * Array initializer such as <code>{ 1, 2, 3 }</code>.
  */
 public class ArrayInit extends ASTList {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
+
     public ArrayInit(ASTree firstElement) {
         super(firstElement);
     }
 
-    public void accept(Visitor v) throws org.hotswap.agent.javassist.compiler.CompileError {
-        v.atArrayInit(this);
-    }
+    @Override
+    public void accept(Visitor v) throws CompileError { v.atArrayInit(this); }
 
-    public String getTag() {
-        return "array";
-    }
+    @Override
+    public String getTag() { return "array"; }
 }

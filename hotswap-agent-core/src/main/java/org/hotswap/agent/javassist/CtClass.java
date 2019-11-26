@@ -29,8 +29,8 @@ import java.util.Collection;
 
 import org.hotswap.agent.javassist.bytecode.ClassFile;
 import org.hotswap.agent.javassist.bytecode.Descriptor;
+import org.hotswap.agent.javassist.bytecode.Opcode;
 import org.hotswap.agent.javassist.expr.ExprEditor;
-import org.hotswap.agent.javassist.compiler.AccessorMaker;
 
 /* Note:
  *
@@ -69,18 +69,18 @@ public abstract class CtClass {
     /**
      * The version number of this release.
      */
-    public static final String version = "3.18.0-GA";
+    public static final String version = "3.24.0-GA";
 
     /**
      * Prints the version number and the copyright notice.
      *
      * <p>The following command invokes this method:
      *
-     * <ul><pre>java -jar javassist.jar</pre></ul>
+     * <pre>java -jar javassist.jar</pre>
      */
     public static void main(String[] args) {
         System.out.println("Javassist version " + CtClass.version);
-        System.out.println("Copyright (C) 1999-2013 Shigeru Chiba."
+        System.out.println("Copyright (C) 1999-2018 Shigeru Chiba."
                            + " All Rights Reserved.");
     }
 
@@ -147,47 +147,47 @@ public abstract class CtClass {
 
         booleanType =
             new CtPrimitiveType("boolean", 'Z', "java.lang.Boolean",
-                                "booleanValue", "()Z", org.hotswap.agent.javassist.bytecode.Opcode.IRETURN,
-                                org.hotswap.agent.javassist.bytecode.Opcode.T_BOOLEAN, 1);
+                                "booleanValue", "()Z", Opcode.IRETURN,
+                                Opcode.T_BOOLEAN, 1);
         primitiveTypes[0] = booleanType;
 
         charType = new CtPrimitiveType("char", 'C', "java.lang.Character",
-                                       "charValue", "()C", org.hotswap.agent.javassist.bytecode.Opcode.IRETURN,
-                                       org.hotswap.agent.javassist.bytecode.Opcode.T_CHAR, 1);
+                                       "charValue", "()C", Opcode.IRETURN,
+                                       Opcode.T_CHAR, 1);
         primitiveTypes[1] = charType;
 
         byteType = new CtPrimitiveType("byte", 'B', "java.lang.Byte",
-                                       "byteValue", "()B", org.hotswap.agent.javassist.bytecode.Opcode.IRETURN,
-                                       org.hotswap.agent.javassist.bytecode.Opcode.T_BYTE, 1);
+                                       "byteValue", "()B", Opcode.IRETURN,
+                                       Opcode.T_BYTE, 1);
         primitiveTypes[2] = byteType;
 
         shortType = new CtPrimitiveType("short", 'S', "java.lang.Short",
-                                        "shortValue", "()S", org.hotswap.agent.javassist.bytecode.Opcode.IRETURN,
-                                        org.hotswap.agent.javassist.bytecode.Opcode.T_SHORT, 1);
+                                        "shortValue", "()S", Opcode.IRETURN,
+                                        Opcode.T_SHORT, 1);
         primitiveTypes[3] = shortType;
 
         intType = new CtPrimitiveType("int", 'I', "java.lang.Integer",
-                                      "intValue", "()I", org.hotswap.agent.javassist.bytecode.Opcode.IRETURN,
-                                      org.hotswap.agent.javassist.bytecode.Opcode.T_INT, 1);
+                                      "intValue", "()I", Opcode.IRETURN,
+                                      Opcode.T_INT, 1);
         primitiveTypes[4] = intType;
 
         longType = new CtPrimitiveType("long", 'J', "java.lang.Long",
-                                       "longValue", "()J", org.hotswap.agent.javassist.bytecode.Opcode.LRETURN,
-                                       org.hotswap.agent.javassist.bytecode.Opcode.T_LONG, 2);
+                                       "longValue", "()J", Opcode.LRETURN,
+                                       Opcode.T_LONG, 2);
         primitiveTypes[5] = longType;
 
         floatType = new CtPrimitiveType("float", 'F', "java.lang.Float",
-                                        "floatValue", "()F", org.hotswap.agent.javassist.bytecode.Opcode.FRETURN,
-                                        org.hotswap.agent.javassist.bytecode.Opcode.T_FLOAT, 1);
+                                        "floatValue", "()F", Opcode.FRETURN,
+                                        Opcode.T_FLOAT, 1);
         primitiveTypes[6] = floatType;
 
         doubleType = new CtPrimitiveType("double", 'D', "java.lang.Double",
-                                         "doubleValue", "()D", org.hotswap.agent.javassist.bytecode.Opcode.DRETURN,
-                                         org.hotswap.agent.javassist.bytecode.Opcode.T_DOUBLE, 2);
+                                         "doubleValue", "()D", Opcode.DRETURN,
+                                         Opcode.T_DOUBLE, 2);
         primitiveTypes[7] = doubleType;
 
         voidType = new CtPrimitiveType("void", 'V', "java.lang.Void",
-                                       null, null, org.hotswap.agent.javassist.bytecode.Opcode.RETURN, 0, 0);
+                                       null, null, Opcode.RETURN, 0, 0);
         primitiveTypes[8] = voidType;
     }
 
@@ -198,6 +198,7 @@ public abstract class CtClass {
     /**
      * Converts the object to a string.
      */
+    @Override
     public String toString() {
         StringBuffer buf = new StringBuffer(getClass().getName());
         buf.append("@");
@@ -255,15 +256,15 @@ public abstract class CtClass {
     /**
      * Undocumented method.  Do not use; internal-use only.
      */
-    public AccessorMaker getAccessorMaker() {
+    public org.hotswap.agent.javassist.compiler.AccessorMaker getAccessorMaker() {
         return null;
     }
 
     /**
      * Returns the uniform resource locator (URL) of the class file.
      */
-    public URL getURL() throws org.hotswap.agent.javassist.NotFoundException {
-        throw new org.hotswap.agent.javassist.NotFoundException(getName());
+    public URL getURL() throws NotFoundException {
+        throw new NotFoundException(getName());
     }
 
     /**
@@ -335,7 +336,7 @@ public abstract class CtClass {
      * If this object represents an array, this method returns the component
      * type of the array.  Otherwise, it returns <code>null</code>.
      */
-    public CtClass getComponentType() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtClass getComponentType() throws NotFoundException {
         return null;
     }
 
@@ -344,7 +345,7 @@ public abstract class CtClass {
      * <code>clazz</code>.  It also returns <code>true</code> if
      * this class is the same as <code>clazz</code>.
      */
-    public boolean subtypeOf(CtClass clazz) throws org.hotswap.agent.javassist.NotFoundException {
+    public boolean subtypeOf(CtClass clazz) throws NotFoundException {
         return this == clazz || getName().equals(clazz.getName());
     }
 
@@ -361,8 +362,7 @@ public abstract class CtClass {
         int index = qname.lastIndexOf('.');
         if (index < 0)
             return qname;
-        else
-            return qname.substring(index + 1);
+        return qname.substring(index + 1);
     }
 
     /**
@@ -373,8 +373,7 @@ public abstract class CtClass {
         int index = qname.lastIndexOf('.');
         if (index < 0)
             return null;
-        else
-            return qname.substring(0, index);
+        return qname.substring(0, index);
     }
 
     /**
@@ -398,7 +397,7 @@ public abstract class CtClass {
      * to a class file.
      *
      * @return null if the generic signature is not included.
-     * @see org.hotswap.agent.javassist.bytecode.SignatureAttribute#toClassSignature(String)
+     * @see javassist.bytecode.SignatureAttribute#toClassSignature(String)
      * @see CtMember#getGenericSignature()
      * @since 3.17
      */
@@ -415,7 +414,7 @@ public abstract class CtClass {
      *
      * <p>For example,
      *
-     * <pre>class List<T> {
+     * <pre>class List&lt;T&gt; {
      *     T value;
      *     T get() { return value; }
      *     void set(T v) { value = v; }
@@ -463,9 +462,14 @@ public abstract class CtClass {
      * and the methods so that the type variable <code>T</code> can be
      * accessible through reflection.
      *
+     * <p><code>MethodSignature</code> is a utility class.  You can directly
+     * pass the signature string to the <code>setGenericSignature</code> method.
+     * For the specification of the signatures, see Section 4.7.9.1 <i>Signatures</i>
+     * of The Java Virtual Machine Specification (Java SE 8).
+     *
      * @param sig       a generic signature.
-     * @see org.hotswap.agent.javassist.bytecode.SignatureAttribute.ClassSignature#encode()
-     * @see org.hotswap.agent.javassist.bytecode.SignatureAttribute.MethodSignature#encode()
+     * @see javassist.bytecode.SignatureAttribute.ClassSignature#encode()
+     * @see javassist.bytecode.SignatureAttribute.MethodSignature#encode()
      * @see CtMember#setGenericSignature(String)
      * @since 3.17
      */
@@ -512,27 +516,30 @@ public abstract class CtClass {
      *
      * @return a <code>Collection&lt;String&gt;</code> object.
      */
-    public synchronized Collection getRefClasses() {
+    public synchronized Collection<String> getRefClasses() {
         ClassFile cf = getClassFile2();
         if (cf != null) {
             ClassMap cm = new ClassMap() {
-                public void put(String oldname, String newname) {
-                    put0(oldname, newname);
+                /** default serialVersionUID */
+                private static final long serialVersionUID = 1L;
+                @Override
+                public String put(String oldname, String newname) {
+                    return put0(oldname, newname);
                 }
-
-                public Object get(Object jvmClassName) {
+                @Override
+                public String get(Object jvmClassName) {
                     String n = toJavaName((String)jvmClassName);
                     put0(n, n);
                     return null;
                 }
 
+                @Override
                 public void fix(String name) {}
             };
             cf.getRefClasses(cm);
             return cm.values();
         }
-        else
-            return null;
+        return null;
     }
 
     /**
@@ -565,10 +572,10 @@ public abstract class CtClass {
 
     /**
      * Returns the modifiers for this class, encoded in an integer.
-     * For decoding, use <code>Modifier</code>.
+     * For decoding, use <code>javassist.Modifier</code>.
      *
      * <p>If the class is a static nested class (a.k.a. static inner class),
-     * the returned modifiers include <code>Modifier.STATIC</code>. 
+     * the returned modifiers include <code>Modifier.STATIC</code>.
      *
      * @see Modifier
      */
@@ -577,28 +584,39 @@ public abstract class CtClass {
     }
 
     /**
-     * Returns true if the class has the specified annotation class.
+     * Returns true if the class has the specified annotation type.
      *
-     * @param clz the annotation class.
+     * @param annotationType the annotation type.
      * @return <code>true</code> if the annotation is found, otherwise <code>false</code>.
      * @since 3.11
      */
-    public boolean hasAnnotation(Class clz) {
+    public boolean hasAnnotation(Class<?> annotationType) {
+        return hasAnnotation(annotationType.getName());
+    }
+
+    /**
+     * Returns true if the class has the specified annotation type.
+     *
+     * @param annotationTypeName the name of annotation type.
+     * @return <code>true</code> if the annotation is found, otherwise <code>false</code>.
+     * @since 3.21
+     */
+    public boolean hasAnnotation(String annotationTypeName) {
         return false;
     }
 
     /**
-     * Returns the annotation if the class has the specified annotation class.
+     * Returns the annotation if the class has the specified annotation type.
      * For example, if an annotation <code>@Author</code> is associated
      * with this class, an <code>Author</code> object is returned.
      * The member values can be obtained by calling methods on
      * the <code>Author</code> object.
      *
-     * @param clz the annotation class.
+     * @param clz the annotation type.
      * @return the annotation if found, otherwise <code>null</code>.
      * @since 3.11
      */
-    public Object getAnnotation(Class clz) throws ClassNotFoundException {
+    public Object getAnnotation(Class<?> clz) throws ClassNotFoundException {
         return null;
     }
 
@@ -640,7 +658,7 @@ public abstract class CtClass {
      * @see #getNestedClasses()
      * @since 3.15
      */
-    public CtClass[] getDeclaredClasses() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtClass[] getDeclaredClasses() throws NotFoundException {
         return getNestedClasses();
     }
 
@@ -651,7 +669,7 @@ public abstract class CtClass {
      *
      * @since 3.2
      */
-    public CtClass[] getNestedClasses() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtClass[] getNestedClasses() throws NotFoundException {
         return new CtClass[0];
     }
 
@@ -663,7 +681,7 @@ public abstract class CtClass {
      * class is modified).
      *
      * @param mod       modifiers encoded by
-     *                  <code>Modifier</code>
+     *                  <code>javassist.Modifier</code>
      * @see Modifier
      */
     public void setModifiers(int mod) {
@@ -694,7 +712,11 @@ public abstract class CtClass {
      * To obtain the super interfaces
      * extended by that interface, call <code>getInterfaces()</code>.
      */
-    public CtClass getSuperclass() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtClass getSuperclass() throws NotFoundException {
+        return null;
+    }
+
+    public String getSuperclassName() throws NotFoundException {
         return null;
     }
 
@@ -711,7 +733,7 @@ public abstract class CtClass {
      * @see #replaceClassName(String, String)
      * @see #replaceClassName(ClassMap)
      */
-    public void setSuperclass(CtClass clazz) throws org.hotswap.agent.javassist.CannotCompileException {
+    public void setSuperclass(CtClass clazz) throws CannotCompileException {
         checkModify();
     }
 
@@ -720,7 +742,7 @@ public abstract class CtClass {
      * by the class or, if this object represents an interface, the interfaces
      * extended by that interface.
      */
-    public CtClass[] getInterfaces() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtClass[] getInterfaces() throws NotFoundException {
         return new CtClass[0];
     }
 
@@ -752,25 +774,57 @@ public abstract class CtClass {
      *
      * @return null if this class is a top-level class or an anonymous class.
      */
-    public CtClass getDeclaringClass() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtClass getDeclaringClass() throws NotFoundException {
         return null;
+    }
+
+    /**
+     * Checks if ctClass is inner class.
+     *
+     * @return true, if is inner class
+     * @throws NotFoundException the not found exception
+     */
+    public boolean isInnerClass()  throws NotFoundException {
+        return false;
     }
 
     /**
      * Returns the immediately enclosing method of this class.
      * This method works only with JDK 1.5 or later.
-     * 
+     *
+     * @return null if this class is not a local class or an anonymous
+     * class.
+     * @deprecated The enclosing method might be a constructor.
+     *             Use {@link #getEnclosingBehavior()}.
+     * @see #getEnclosingBehavior()
+     */
+    @Deprecated
+    public final CtMethod getEnclosingMethod() throws NotFoundException {
+        CtBehavior b = getEnclosingBehavior();
+        if (b == null)
+            return null;
+        else if (b instanceof CtMethod)
+            return (CtMethod)b;
+        else
+            throw new NotFoundException(b.getLongName() + " is enclosing " + getName());
+    }
+
+    /**
+     * Returns the immediately enclosing method of this class.
+     * It might be not a method but a constructor.
+     * This method works only with JDK 1.5 or later.
+     *
      * @return null if this class is not a local class or an anonymous
      * class.
      */
-    public org.hotswap.agent.javassist.CtMethod getEnclosingMethod() throws org.hotswap.agent.javassist.NotFoundException {
+    public CtBehavior getEnclosingBehavior() throws NotFoundException {
         return null;
     }
 
     /**
      * Makes a new public nested class.  If this method is called,
      * the <code>CtClass</code>, which encloses the nested class, is modified
-     * since a class file includes a list of nested classes.  
+     * since a class file includes a list of nested classes.
      *
      * <p>The current implementation only supports a static nested class.
      * <code>isStatic</code> must be true.
@@ -788,13 +842,13 @@ public abstract class CtClass {
      * That array includes non-private fields inherited from the
      * superclasses.
      */
-    public org.hotswap.agent.javassist.CtField[] getFields() { return new org.hotswap.agent.javassist.CtField[0]; }
+    public CtField[] getFields() { return new CtField[0]; }
 
     /**
      * Returns the field with the specified name.  The returned field
      * may be a private field declared in a super class or interface.
      */
-    public org.hotswap.agent.javassist.CtField getField(String name) throws org.hotswap.agent.javassist.NotFoundException {
+    public CtField getField(String name) throws NotFoundException {
         return getField(name, null);
     }
 
@@ -806,17 +860,17 @@ public abstract class CtClass {
      *
      * @param name      the field name.
      * @param desc      the type descriptor of the field.  It is available by
-     *                  {@link org.hotswap.agent.javassist.CtField#getSignature()}.
-     * @see org.hotswap.agent.javassist.CtField#getSignature()
+     *                  {@link CtField#getSignature()}.
+     * @see CtField#getSignature()
      */
-    public org.hotswap.agent.javassist.CtField getField(String name, String desc) throws org.hotswap.agent.javassist.NotFoundException {
-        throw new org.hotswap.agent.javassist.NotFoundException(name);
+    public CtField getField(String name, String desc) throws NotFoundException {
+        throw new NotFoundException(name);
     }
 
     /**
      * @return null     if the specified field is not found.
      */
-    org.hotswap.agent.javassist.CtField getField2(String name, String desc) { return null; }
+    CtField getField2(String name, String desc) { return null; }
 
     /**
      * Gets all the fields declared in the class.  The inherited fields
@@ -824,7 +878,7 @@ public abstract class CtClass {
      *
      * <p>Note: the result does not include inherited fields.
      */
-    public org.hotswap.agent.javassist.CtField[] getDeclaredFields() { return new org.hotswap.agent.javassist.CtField[0]; }
+    public CtField[] getDeclaredFields() { return new CtField[0]; }
 
     /**
      * Retrieves the field with the specified name among the fields
@@ -832,8 +886,8 @@ public abstract class CtClass {
      *
      * <p>Note: this method does not search the super classes.
      */
-    public org.hotswap.agent.javassist.CtField getDeclaredField(String name) throws org.hotswap.agent.javassist.NotFoundException {
-        throw new org.hotswap.agent.javassist.NotFoundException(name);
+    public CtField getDeclaredField(String name) throws NotFoundException {
+        throw new NotFoundException(name);
     }
 
     /**
@@ -845,11 +899,11 @@ public abstract class CtClass {
      *
      * @param name      the field name.
      * @param desc      the type descriptor of the field.  It is available by
-     *                  {@link org.hotswap.agent.javassist.CtField#getSignature()}.
-     * @see org.hotswap.agent.javassist.CtField#getSignature()
+     *                  {@link CtField#getSignature()}.
+     * @see CtField#getSignature()
      */
-    public org.hotswap.agent.javassist.CtField getDeclaredField(String name, String desc) throws org.hotswap.agent.javassist.NotFoundException {
-        throw new org.hotswap.agent.javassist.NotFoundException(name);
+    public CtField getDeclaredField(String name, String desc) throws NotFoundException {
+        throw new NotFoundException(name);
     }
 
     /**
@@ -872,21 +926,21 @@ public abstract class CtClass {
      * which is represented by a character string
      * called method descriptor.
      * For details of the method descriptor, see the JVM specification
-     * or <code>Descriptor</code>.
+     * or <code>javassist.bytecode.Descriptor</code>.
      *
      * @param desc      method descriptor
-     * @see org.hotswap.agent.javassist.bytecode.Descriptor
+     * @see javassist.bytecode.Descriptor
      */
     public CtConstructor getConstructor(String desc)
-        throws org.hotswap.agent.javassist.NotFoundException
+        throws NotFoundException
     {
-        throw new org.hotswap.agent.javassist.NotFoundException("no such constructor");
+        throw new NotFoundException("no such constructor");
     }
 
     /**
      * Gets all the constructors declared in the class.
      *
-     * @see CtConstructor
+     * @see javassist.CtConstructor
      */
     public CtConstructor[] getDeclaredConstructors() {
         return new CtConstructor[0];
@@ -898,7 +952,7 @@ public abstract class CtClass {
      * @param params    parameter types.
      */
     public CtConstructor getDeclaredConstructor(CtClass[] params)
-        throws org.hotswap.agent.javassist.NotFoundException
+        throws NotFoundException
     {
         String desc = Descriptor.ofConstructor(params);
         return getConstructor(desc);
@@ -911,7 +965,7 @@ public abstract class CtClass {
      * no class initializer is not declared.
      *
      * @see #makeClassInitializer()
-     * @see CtConstructor
+     * @see javassist.CtConstructor
      */
     public CtConstructor getClassInitializer() {
         return null;
@@ -923,8 +977,8 @@ public abstract class CtClass {
      * That array includes non-private methods inherited from the
      * superclasses.
      */
-    public org.hotswap.agent.javassist.CtMethod[] getMethods() {
-        return new org.hotswap.agent.javassist.CtMethod[0];
+    public CtMethod[] getMethods() {
+        return new CtMethod[0];
     }
 
     /**
@@ -937,22 +991,22 @@ public abstract class CtClass {
      * @param name      method name
      * @param desc      method descriptor
      * @see CtBehavior#getSignature()
-     * @see org.hotswap.agent.javassist.bytecode.Descriptor
+     * @see javassist.bytecode.Descriptor
      */
-    public org.hotswap.agent.javassist.CtMethod getMethod(String name, String desc)
-        throws org.hotswap.agent.javassist.NotFoundException
+    public CtMethod getMethod(String name, String desc)
+        throws NotFoundException
     {
-        throw new org.hotswap.agent.javassist.NotFoundException(name);
+        throw new NotFoundException(name);
     }
 
     /**
      * Gets all methods declared in the class.  The inherited methods
      * are not included.
      *
-     * @see org.hotswap.agent.javassist.CtMethod
+     * @see javassist.CtMethod
      */
-    public org.hotswap.agent.javassist.CtMethod[] getDeclaredMethods() {
-        return new org.hotswap.agent.javassist.CtMethod[0];
+    public CtMethod[] getDeclaredMethods() {
+        return new CtMethod[0];
     }
 
     /**
@@ -963,12 +1017,26 @@ public abstract class CtClass {
      *
      * @param name              method name
      * @param params            parameter types
-     * @see org.hotswap.agent.javassist.CtMethod
+     * @see javassist.CtMethod
      */
-    public org.hotswap.agent.javassist.CtMethod getDeclaredMethod(String name, CtClass[] params)
-        throws org.hotswap.agent.javassist.NotFoundException
+    public CtMethod getDeclaredMethod(String name, CtClass[] params)
+        throws NotFoundException
     {
-        throw new org.hotswap.agent.javassist.NotFoundException(name);
+        throw new NotFoundException(name);
+    }
+
+    /**
+     * Retrieves methods with the specified name among the methods
+     * declared in the class.  Multiple methods with different parameters
+     * may be returned.
+     *
+     * <p>Note: this method does not search the superclasses.</p>
+     *
+     * @param name      method name.
+     * @since 3.19
+     */
+    public CtMethod[] getDeclaredMethods(String name) throws NotFoundException {
+        throw new NotFoundException(name);
     }
 
     /**
@@ -978,10 +1046,10 @@ public abstract class CtClass {
      *
      * <p>Note: this method does not search the superclasses.
      *
-     * @see org.hotswap.agent.javassist.CtMethod
+     * @see javassist.CtMethod
      */
-    public org.hotswap.agent.javassist.CtMethod getDeclaredMethod(String name) throws org.hotswap.agent.javassist.NotFoundException {
-        throw new org.hotswap.agent.javassist.NotFoundException(name);
+    public CtMethod getDeclaredMethod(String name) throws NotFoundException {
+        throw new NotFoundException(name);
     }
 
     /**
@@ -992,9 +1060,9 @@ public abstract class CtClass {
      * @see #getClassInitializer()
      */
     public CtConstructor makeClassInitializer()
-        throws org.hotswap.agent.javassist.CannotCompileException
+        throws CannotCompileException
     {
-        throw new org.hotswap.agent.javassist.CannotCompileException("not a class");
+        throw new CannotCompileException("not a class");
     }
 
     /**
@@ -1004,7 +1072,7 @@ public abstract class CtClass {
      * @see #makeClassInitializer()
      */
     public void addConstructor(CtConstructor c)
-        throws org.hotswap.agent.javassist.CannotCompileException
+        throws CannotCompileException
     {
         checkModify();
     }
@@ -1013,16 +1081,16 @@ public abstract class CtClass {
      * Removes a constructor declared in this class.
      *
      * @param c     removed constructor.
-     * @throws org.hotswap.agent.javassist.NotFoundException   if the constructor is not found.
+     * @throws NotFoundException   if the constructor is not found.
      */
-    public void removeConstructor(CtConstructor c) throws org.hotswap.agent.javassist.NotFoundException {
+    public void removeConstructor(CtConstructor c) throws NotFoundException {
         checkModify();
     }
 
     /**
      * Adds a method.
      */
-    public void addMethod(org.hotswap.agent.javassist.CtMethod m) throws org.hotswap.agent.javassist.CannotCompileException {
+    public void addMethod(CtMethod m) throws CannotCompileException {
         checkModify();
     }
 
@@ -1030,9 +1098,9 @@ public abstract class CtClass {
      * Removes a method declared in this class.
      *
      * @param m     removed method.
-     * @throws org.hotswap.agent.javassist.NotFoundException   if the method is not found.
+     * @throws NotFoundException   if the method is not found.
      */
-    public void removeMethod(org.hotswap.agent.javassist.CtMethod m) throws org.hotswap.agent.javassist.NotFoundException {
+    public void removeMethod(CtMethod m) throws NotFoundException {
         checkModify();
      }
 
@@ -1043,10 +1111,10 @@ public abstract class CtClass {
      * <code>CtClass</code> cannot be directly added to this class.
      * Only a field created for this class can be added.
      *
-     * @see org.hotswap.agent.javassist.CtField#CtField(org.hotswap.agent.javassist.CtField,CtClass)
+     * @see javassist.CtField#CtField(CtField,CtClass)
      */
-    public void addField(org.hotswap.agent.javassist.CtField f) throws org.hotswap.agent.javassist.CannotCompileException {
-        addField(f, (org.hotswap.agent.javassist.CtField.Initializer)null);
+    public void addField(CtField f) throws CannotCompileException {
+        addField(f, (CtField.Initializer)null);
     }
 
     /**
@@ -1060,11 +1128,11 @@ public abstract class CtClass {
      * Any regular Java expression can be used for specifying the initial
      * value.  The followings are examples.
      *
-     * <ul><pre>
+     * <pre>
      * cc.addField(f, "0")               // the initial value is 0.
      * cc.addField(f, "i + 1")           // i + 1.
      * cc.addField(f, "new Point()");    // a Point object.
-     * </pre></ul>
+     * </pre>
      *
      * <p>Here, the type of variable <code>cc</code> is <code>CtClass</code>.
      * The type of <code>f</code> is <code>CtField</code>.
@@ -1076,11 +1144,11 @@ public abstract class CtClass {
      *
      * @param init      an expression for the initial value.
      *
-     * @see org.hotswap.agent.javassist.CtField.Initializer#byExpr(String)
-     * @see org.hotswap.agent.javassist.CtField#CtField(org.hotswap.agent.javassist.CtField,CtClass)
+     * @see javassist.CtField.Initializer#byExpr(String)
+     * @see javassist.CtField#CtField(CtField,CtClass)
      */
-    public void addField(org.hotswap.agent.javassist.CtField f, String init)
-        throws org.hotswap.agent.javassist.CannotCompileException
+    public void addField(CtField f, String init)
+        throws CannotCompileException
     {
         checkModify();
     }
@@ -1094,21 +1162,21 @@ public abstract class CtClass {
      *
      * <p>For example,
      *
-     * <ul><pre>
+     * <pre>
      * CtClass cc = ...;
      * addField(new CtField(CtClass.intType, "i", cc),
      *          CtField.Initializer.constant(1));
-     * </pre></ul>
+     * </pre>
      *
      * <p>This code adds an <code>int</code> field named "i".  The
      * initial value of this field is 1.
      *
      * @param init      specifies the initial value of the field.
      *
-     * @see org.hotswap.agent.javassist.CtField#CtField(org.hotswap.agent.javassist.CtField,CtClass)
+     * @see javassist.CtField#CtField(CtField,CtClass)
      */
-    public void addField(org.hotswap.agent.javassist.CtField f, org.hotswap.agent.javassist.CtField.Initializer init)
-        throws org.hotswap.agent.javassist.CannotCompileException
+    public void addField(CtField f, CtField.Initializer init)
+        throws CannotCompileException
     {
         checkModify();
     }
@@ -1117,9 +1185,9 @@ public abstract class CtClass {
      * Removes a field declared in this class.
      *
      * @param f     removed field.
-     * @throws org.hotswap.agent.javassist.NotFoundException   if the field is not found.
+     * @throws NotFoundException   if the field is not found.
      */
-    public void removeField(org.hotswap.agent.javassist.CtField f) throws org.hotswap.agent.javassist.NotFoundException {
+    public void removeField(CtField f) throws NotFoundException {
         checkModify();
     }
 
@@ -1133,12 +1201,12 @@ public abstract class CtClass {
      * <code>javassist.bytecode</code> package.  For example, the following
      * expression returns all the attributes of a class file.
      *
-     * <ul><pre>
+     * <pre>
      * getClassFile().getAttributes()
-     * </pre></ul>
+     * </pre>
      *
      * @param name              attribute name
-     * @see org.hotswap.agent.javassist.bytecode.AttributeInfo
+     * @see javassist.bytecode.AttributeInfo
      */
     public byte[] getAttribute(String name) {
         return null;
@@ -1158,13 +1226,13 @@ public abstract class CtClass {
      * <code>javassist.bytecode</code> package.  For example, the following
      * expression adds an attribute <code>info</code> to a class file.
      *
-     * <ul><pre>
+     * <pre>
      * getClassFile().addAttribute(info)
-     * </pre></ul>
+     * </pre>
      *
      * @param name      attribute name
      * @param data      attribute value
-     * @see org.hotswap.agent.javassist.bytecode.AttributeInfo
+     * @see javassist.bytecode.AttributeInfo
      */
     public void setAttribute(String name, byte[] data) {
         checkModify();
@@ -1179,7 +1247,7 @@ public abstract class CtClass {
      * @param converter         specifies how to modify.
      */
     public void instrument(CodeConverter converter)
-        throws org.hotswap.agent.javassist.CannotCompileException
+        throws CannotCompileException
     {
         checkModify();
     }
@@ -1193,7 +1261,7 @@ public abstract class CtClass {
      * @param editor            specifies how to modify.
      */
     public void instrument(ExprEditor editor)
-        throws org.hotswap.agent.javassist.CannotCompileException
+        throws CannotCompileException
     {
         checkModify();
     }
@@ -1207,21 +1275,86 @@ public abstract class CtClass {
      * server, the context class loader might be inappropriate to load the
      * class.
      *
+     * <p><b>Warning:</b> In Java 11 or later, the call to this method will
+     * print a warning message:</p>
+     * <blockquote><pre>
+     * WARNING: An illegal reflective access operation has occurred
+     * WARNING: Illegal reflective access by javassist.util.proxy.SecurityActions$3 ...
+     * WARNING: Please consider reporting this to the maintainers of javassist.util.proxy.SecurityActions$3
+     * WARNING: Use --illegal-access=warn to enable warnings of further illegal reflective access operations
+     * WARNING: All illegal access operations will be denied in a future release
+     * </pre></blockquote>
+     * <p>To avoid this message, use {@link #toClass(Class)}
+     * or {@link #toClass(java.lang.invoke.MethodHandles.Lookup)}.
+     * {@link #toClass()} will be unavailable in a future release.
+     * </p>
+     *
+     * <p><b>Warning:</b> A Class object returned by this method may not
+     * work with a security manager or a signed jar file because a
+     * protection domain is not specified.</p>
+     *
+     * <p>Note: this method calls <code>toClass()</code>
+     * in <code>ClassPool</code>.</p>
+     *
+     * @see #toClass(java.lang.invoke.MethodHandles.Lookup)
+     * @see #toClass(Class)
+     * @see ClassPool#toClass(CtClass)
+     */
+    public Class<?> toClass() throws CannotCompileException {
+        return getClassPool().toClass(this);
+    }
+
+    /**
+     * Converts this class to a <code>java.lang.Class</code> object.
+     * Once this method is called, further modifications are not
+     * allowed any more.
+     *
+     * <p>This method is provided for convenience.  You should use
+     * {@code toClass(Lookup)} for better compatibility with the
+     * module system.
+     *
+     * <p>Note: this method calls <code>toClass()</code>
+     * in <code>ClassPool</code>.
+     *
+     * <p><b>Warning:</b> A Class object returned by this method may not
+     * work with a security manager or a signed jar file because a
+     * protection domain is not specified.
+     *
+     * @param neighbor    A class belonging to the same package that this
+     *                    class belongs to.  It is used to load the class.
+     * @see ClassPool#toClass(CtClass,Class)
+     * @see #toClass(java.lang.invoke.MethodHandles.Lookup)
+     * @since 3.24
+     */
+    public Class<?> toClass(Class<?> neighbor) throws CannotCompileException
+    {
+        return getClassPool().toClass(this, neighbor);
+    }
+
+    /**
+     * Converts this class to a <code>java.lang.Class</code> object.
+     * Once this method is called, further modifications are not
+     * allowed any more.
+     *
      * <p>This method is provided for convenience.  If you need more
      * complex functionality, you should write your own class loader.
      *
      * <p>Note: this method calls <code>toClass()</code>
      * in <code>ClassPool</code>.
      *
-     * <p><b>Warining:</b> A Class object returned by this method may not
+     * <p><b>Warning:</b> A Class object returned by this method may not
      * work with a security manager or a signed jar file because a
      * protection domain is not specified.
      *
-     * @see #toClass(java.lang.ClassLoader,ProtectionDomain)
-     * @see ClassPool#toClass(CtClass)
+     * @param lookup    used when loading the class.  It has to have
+     *                  an access right to define a new class.
+     * @see ClassPool#toClass(CtClass,java.lang.invoke.MethodHandles.Lookup)
+     * @since 3.24
      */
-    public Class toClass() throws org.hotswap.agent.javassist.CannotCompileException {
-        return getClassPool().toClass(this);
+    public Class<?> toClass(java.lang.invoke.MethodHandles.Lookup lookup)
+        throws CannotCompileException
+    {
+        return getClassPool().toClass(this, lookup);
     }
 
     /**
@@ -1255,29 +1388,30 @@ public abstract class CtClass {
      * @see ClassPool#toClass(CtClass,java.lang.ClassLoader)
      * @since 3.3
      */
-    public Class toClass(ClassLoader loader, ProtectionDomain domain)
-        throws org.hotswap.agent.javassist.CannotCompileException
+    public Class<?> toClass(ClassLoader loader, ProtectionDomain domain)
+        throws CannotCompileException
     {
         ClassPool cp = getClassPool();
         if (loader == null)
             loader = cp.getClassLoader();
 
-        return cp.toClass(this, loader, domain);
+        return cp.toClass(this, null, loader, domain);
     }
 
     /**
      * Converts this class to a <code>java.lang.Class</code> object.
      *
-     * <p><b>Warining:</b> A Class object returned by this method may not
+     * <p><b>Warning:</b> A Class object returned by this method may not
      * work with a security manager or a signed jar file because a
      * protection domain is not specified.
      *
      * @deprecated      Replaced by {@link #toClass(ClassLoader,ProtectionDomain)}
      */
-    public final Class toClass(ClassLoader loader)
-        throws org.hotswap.agent.javassist.CannotCompileException
+    @Deprecated
+    public final Class<?> toClass(ClassLoader loader)
+        throws CannotCompileException
     {
-        return getClassPool().toClass(this, loader);
+        return getClassPool().toClass(this, null, loader, null);
     }
 
     /**
@@ -1315,7 +1449,7 @@ public abstract class CtClass {
      * <p>If <code>ClassPool.doPruning</code> is true, the automatic pruning
      * is on by default.  Otherwise, it is off.  The default value of
      * <code>ClassPool.doPruning</code> is false.
-     * 
+     *
      * @param stop      disallow pruning if true.  Otherwise, allow.
      * @return the previous status of pruning.  true if pruning is already stopped.
      *
@@ -1339,7 +1473,7 @@ public abstract class CtClass {
      *
      * <p><code>toBytecode()</code>, <code>writeFile()</code>, and
      * <code>toClass()</code> internally call this method if
-     * automatic pruning is on. 
+     * automatic pruning is on.
      *
      * <p>According to some experiments, pruning does not really reduce
      * memory consumption.  Only about 20%.  Since pruning takes time,
@@ -1350,7 +1484,7 @@ public abstract class CtClass {
      * @see ClassPool#doPruning
      *
      * @see #toBytecode()
-     * @see #toClass()
+     * @see #toClass(Class)
      * @see #writeFile()
      * @see #instrument(CodeConverter)
      * @see #instrument(ExprEditor)
@@ -1384,7 +1518,7 @@ public abstract class CtClass {
      *
      * @return the contents of the class file.
      */
-    public byte[] toBytecode() throws IOException, org.hotswap.agent.javassist.CannotCompileException {
+    public byte[] toBytecode() throws IOException, CannotCompileException {
         ByteArrayOutputStream barray = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(barray);
         try {
@@ -1406,7 +1540,7 @@ public abstract class CtClass {
      * @see #debugWriteFile()
      */
     public void writeFile()
-        throws org.hotswap.agent.javassist.NotFoundException, IOException, org.hotswap.agent.javassist.CannotCompileException
+        throws NotFoundException, IOException, CannotCompileException
     {
         writeFile(".");
     }
@@ -1421,7 +1555,7 @@ public abstract class CtClass {
      * @see #debugWriteFile(String)
      */
     public void writeFile(String directoryName)
-        throws org.hotswap.agent.javassist.CannotCompileException, IOException
+        throws CannotCompileException, IOException
     {
         DataOutputStream out = makeFileOutput(directoryName);
         try {
@@ -1493,27 +1627,32 @@ public abstract class CtClass {
                 file = new FileOutputStream(filename);
         }
 
+        @Override
         public void write(int b) throws IOException {
             init();
             file.write(b);
         }
 
+        @Override
         public void write(byte[] b) throws IOException {
             init();
             file.write(b);
         }
 
+        @Override
         public void write(byte[] b, int off, int len) throws IOException {
             init();
             file.write(b, off, len);
 
         }
 
+        @Override
         public void flush() throws IOException {
             init();
             file.flush();
         }
 
+        @Override
         public void close() throws IOException {
             init();
             file.close();
@@ -1530,9 +1669,9 @@ public abstract class CtClass {
      * @param out       the output stream that a class file is written to.
      */
     public void toBytecode(DataOutputStream out)
-        throws org.hotswap.agent.javassist.CannotCompileException, IOException
+        throws CannotCompileException, IOException
     {
-        throw new org.hotswap.agent.javassist.CannotCompileException("not a class");
+        throw new CannotCompileException("not a class");
     }
 
     /**

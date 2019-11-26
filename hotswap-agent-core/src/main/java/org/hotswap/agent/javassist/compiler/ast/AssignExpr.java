@@ -16,6 +16,8 @@
 
 package org.hotswap.agent.javassist.compiler.ast;
 
+import org.hotswap.agent.javassist.compiler.CompileError;
+
 /**
  * Assignment expression.
  */
@@ -23,6 +25,9 @@ public class AssignExpr extends Expr {
     /* operator must be either of:
      * =, %=, &=, *=, +=, -=, /=, ^=, |=, <<=, >>=, >>>=
      */
+
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
 
     private AssignExpr(int op, ASTree _head, ASTList _tail) {
         super(op, _head, _tail);
@@ -33,7 +38,8 @@ public class AssignExpr extends Expr {
         return new AssignExpr(op, oprand1, new ASTList(oprand2));
     }
 
-    public void accept(Visitor v) throws org.hotswap.agent.javassist.compiler.CompileError {
+    @Override
+    public void accept(Visitor v) throws CompileError {
         v.atAssignExpr(this);
     }
 }

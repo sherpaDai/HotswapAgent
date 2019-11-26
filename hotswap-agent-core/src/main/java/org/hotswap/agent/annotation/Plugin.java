@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.annotation;
 
 import java.lang.annotation.*;
@@ -26,6 +44,19 @@ public @interface Plugin {
     String description() default "";
 
     /**
+     * Plugin group the plugin belongs to. Group is used to resolve fallback plugin
+     *
+     * @return the string
+     */
+    String group() default "";
+
+    /**
+     * If no other plugin matches and fallback is set to true, then use this plugin
+     * @return
+     */
+    boolean fallback() default false;
+
+    /**
      * Version of target framework this framework was tested with.
      */
     String[] testedVersions();
@@ -42,4 +73,5 @@ public @interface Plugin {
      * supporting class in addition to pluginClass itself.
      */
     Class<?>[] supportClass() default {};
+
 }

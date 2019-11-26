@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.tomcat;
 
 import org.hotswap.agent.annotation.OnClassLoadEvent;
@@ -78,7 +96,8 @@ public class WebappLoaderTransformer {
         if (!stopHandled) {
             try {
                 ctClass.getDeclaredMethod("stopInternal").insertBefore(
-                        PluginManagerInvoker.buildCallCloseClassLoader("getClassLoader()")
+                        PluginManagerInvoker.buildCallCloseClassLoader("getClassLoader()") +
+                        TomcatPlugin.class.getName() + ".close(getClassLoader());"
                 );
                 stopHandled = true;
             } catch (NotFoundException e) {
@@ -88,10 +107,12 @@ public class WebappLoaderTransformer {
         }
 
         // tomcat 6x
+        // @Deprecated
         if (!stopHandled) {
             try {
                 ctClass.getDeclaredMethod("stop").insertBefore(
-                        PluginManagerInvoker.buildCallCloseClassLoader("getClassLoader()")
+                        PluginManagerInvoker.buildCallCloseClassLoader("getClassLoader()") +
+                        TomcatPlugin.class.getName() + ".close(getClassLoader());"
                 );
                 stopHandled = true;
             } catch (NotFoundException e) {

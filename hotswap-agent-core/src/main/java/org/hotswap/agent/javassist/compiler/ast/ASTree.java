@@ -16,9 +16,9 @@
 
 package org.hotswap.agent.javassist.compiler.ast;
 
-import org.hotswap.agent.javassist.compiler.CompileError;
-
 import java.io.Serializable;
+
+import org.hotswap.agent.javassist.compiler.CompileError;
 
 /**
  * Abstract Syntax Tree.  An ASTree object represents a node of
@@ -26,19 +26,16 @@ import java.io.Serializable;
  * and <code>getRight()</code> returns null.
  */
 public abstract class ASTree implements Serializable {
-    public ASTree getLeft() {
-        return null;
-    }
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
 
-    public ASTree getRight() {
-        return null;
-    }
+    public ASTree getLeft() { return null; }
 
-    public void setLeft(ASTree _left) {
-    }
+    public ASTree getRight() { return null; }
 
-    public void setRight(ASTree _right) {
-    }
+    public void setLeft(ASTree _left) {}
+
+    public void setRight(ASTree _right) {}
 
     /**
      * Is a method for the visitor pattern.  It calls
@@ -47,6 +44,7 @@ public abstract class ASTree implements Serializable {
      */
     public abstract void accept(Visitor v) throws CompileError;
 
+    @Override
     public String toString() {
         StringBuffer sbuf = new StringBuffer();
         sbuf.append('<');

@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.owb.beans;
 
 import java.util.Set;
@@ -28,7 +46,7 @@ public interface OwbHotswapContext {
     /**
      * Determines if the context object is active.
      *
-     * If the context is active, then _redefine() is called.
+     * If the context is active, then $$ha$redefine() is called.
      *
      * @definedIn Context
      * @return <tt>true</tt> if the context is active, or <tt>false</tt>
@@ -52,24 +70,24 @@ public interface OwbHotswapContext {
      *
      * @param bean
      */
-    void _addReloading_owb(Contextual<Object> bean);
+    void $$ha$addBeanToReloadOwb(Contextual<Object> bean);
 
     /**
      * Gets the OWB beans to be reloaded.
      *
      * @return the OWB beans to be reloaded
      */
-    Set<Contextual<Object>> _getBeansToReloadOwb();
+    Set<Contextual<Object>> $$ha$getBeansToReloadOwb();
 
     /**
      * reload the owb beans which have changed
      */
-    void _reloadOwb();
+    void $$ha$reloadOwb();
 
     /**
      * the original isActive() method (renamed)
      *
      * @return
      */
-    boolean _isActiveOwb();
+    boolean $$ha$isActiveOwb();
 }

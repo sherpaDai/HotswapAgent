@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.annotation.handler;
 
 import java.lang.annotation.Annotation;
@@ -5,7 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
-import org.hotswap.agent.annotation.Versions;
+import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.versions.DeploymentInfo;
 import org.hotswap.agent.versions.VersionMatchResult;
@@ -39,42 +57,45 @@ public class PluginAnnotation<T extends Annotation> {
 
     // plugin matcher
     final PluginMatcher pluginMatcher;
-    
+
     // Method matcher
     final MethodMatcher methodMatcher;
-    
+
+    // plugin group (elresolver etc..)
+    final String group;
+
+    // Falback plugin - plugin is used if no other plugin in the group version matches
     final boolean fallback;
-    
+
     public PluginAnnotation(Class<?> pluginClass, Object plugin, T annotation, Method method) {
         this.pluginClass = pluginClass;
         this.plugin = plugin;
         this.annotation = annotation;
         this.method = method;
-        
+
+        Plugin pluginAnnotation = pluginClass.getAnnotation(Plugin.class);
+        this.group = (pluginAnnotation.group() != null && !pluginAnnotation.group().isEmpty()) ? pluginAnnotation.group() : null;
+        this.fallback = pluginAnnotation.fallback();
+
         if(method != null && (Modifier.isStatic(method.getModifiers()))) {
             this.pluginMatcher = new PluginMatcher(pluginClass);
             this.methodMatcher= new MethodMatcher(method);
-            Versions v = pluginClass.getAnnotation(Versions.class);
-            if(v == null || v.fallback()) {
-                this.fallback = Boolean.TRUE;
-            } else {
-                this.fallback = Boolean.FALSE;
-            }
         } else {
             this.pluginMatcher = null;
             this.methodMatcher = null;
-            this.fallback  = Boolean.TRUE;
-        }        
+        }
     }
 
     public PluginAnnotation(Class<?> pluginClass, Object plugin, T annotation, Field field) {
+
         this.pluginClass = pluginClass;
         this.plugin = plugin;
         this.annotation = annotation;
         this.field = field;
         this.pluginMatcher = null;
-        this.methodMatcher = null;    
-        this.fallback  = Boolean.TRUE;    
+        this.methodMatcher = null;
+        this.fallback  = false;
+        this.group = null;
     }
 
     /**
@@ -99,7 +120,7 @@ public class PluginAnnotation<T extends Annotation> {
     public Field getField() {
         return field;
     }
-    
+
     public boolean shouldCheckVersion() {
         return //
         (this.plugin == null)//
@@ -110,12 +131,21 @@ public class PluginAnnotation<T extends Annotation> {
                         (methodMatcher != null && methodMatcher.isApply())//
                 );//
     }
- 
+
+    /**
+     * @return true, if plugin is fallback
+     */
     public boolean isFallBack() {
        return fallback;
     }
 
-    
+    /**
+     * @return the plugin group
+     */
+    public String getGroup() {
+        return group;
+    }
+
     /**
      * Matches.
      *
@@ -127,7 +157,7 @@ public class PluginAnnotation<T extends Annotation> {
             LOGGER.debug("No matchers, apply");
             return true;
         }
-        
+
         if(pluginMatcher != null && pluginMatcher.isApply()) {
             if(VersionMatchResult.REJECTED.equals(pluginMatcher.matches(deploymentInfo))){
                 LOGGER.debug("Plugin matcher rejected");

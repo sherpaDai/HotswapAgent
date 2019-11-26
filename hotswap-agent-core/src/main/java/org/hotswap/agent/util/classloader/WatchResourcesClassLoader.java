@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.util.classloader;
 
 import org.hotswap.agent.logging.AgentLogger;
@@ -29,7 +47,7 @@ public class WatchResourcesClassLoader extends URLClassLoader {
      * URLs of changed resources. Use this set to check if the resource was changed and hence should
      * be returned by this classloader.
      */
-    Set<URL> changedUrls = new HashSet<URL>();
+    Set<URL> changedUrls = new HashSet<>();
 
     /**
      * Watch for requested resource in parent classloader in case it is not found by this classloader?
@@ -164,7 +182,7 @@ public class WatchResourcesClassLoader extends URLClassLoader {
             URL resource = watchResourcesClassLoader.getResource(name);
             if (resource != null && isResourceChanged(resource)) {
                 LOGGER.trace("watchResources - using changed resource {}", name);
-                Vector<URL> res = new Vector<URL>();
+                Vector<URL> res = new Vector<>();
                 res.add(resource);
                 return res.elements();
             }

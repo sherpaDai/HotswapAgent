@@ -18,6 +18,9 @@ package org.hotswap.agent.javassist.convert;
 
 import org.hotswap.agent.javassist.CannotCompileException;
 import org.hotswap.agent.javassist.CtClass;
+import org.hotswap.agent.javassist.bytecode.CodeAttribute;
+import org.hotswap.agent.javassist.bytecode.CodeIterator;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
 
 final public class TransformNewClass extends Transformer {
     private int nested;
@@ -31,20 +34,23 @@ final public class TransformNewClass extends Transformer {
         this.newClassName = newClassName;
     }
 
-    public void initialize(org.hotswap.agent.javassist.bytecode.ConstPool cp, org.hotswap.agent.javassist.bytecode.CodeAttribute attr) {
+    @Override
+    public void initialize(ConstPool cp, CodeAttribute attr) {
         nested = 0;
         newClassIndex = newMethodNTIndex = newMethodIndex = 0;
     }
 
     /**
      * Modifies a sequence of
-     * NEW classname
-     * DUP
-     * ...
-     * INVOKESPECIAL classname:method
+     *    NEW classname
+     *    DUP
+     *    ...
+     *    INVOKESPECIAL classname:method
      */
-    public int transform(CtClass clazz, int pos, org.hotswap.agent.javassist.bytecode.CodeIterator iterator,
-                         org.hotswap.agent.javassist.bytecode.ConstPool cp) throws CannotCompileException {
+    @Override
+    public int transform(CtClass clazz, int pos, CodeIterator iterator,
+                         ConstPool cp) throws CannotCompileException
+    {
         int index;
         int c = iterator.byteAt(pos);
         if (c == NEW) {
@@ -52,7 +58,7 @@ final public class TransformNewClass extends Transformer {
             if (cp.getClassInfo(index).equals(classname)) {
                 if (iterator.byteAt(pos + 3) != DUP)
                     throw new CannotCompileException(
-                            "NEW followed by no DUP was found");
+                                "NEW followed by no DUP was found");
 
                 if (newClassIndex == 0)
                     newClassIndex = cp.addClassInfo(newClassName);
@@ -60,7 +66,8 @@ final public class TransformNewClass extends Transformer {
                 iterator.write16bit(newClassIndex, pos + 1);
                 ++nested;
             }
-        } else if (c == INVOKESPECIAL) {
+        }
+        else if (c == INVOKESPECIAL) {
             index = iterator.u16bitAt(pos + 1);
             int typedesc = cp.isConstructor(classname, index);
             if (typedesc != 0 && nested > 0) {

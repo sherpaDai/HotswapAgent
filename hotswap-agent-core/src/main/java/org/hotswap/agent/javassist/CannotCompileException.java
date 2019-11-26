@@ -16,17 +16,22 @@
 
 package org.hotswap.agent.javassist;
 
+import org.hotswap.agent.javassist.compiler.CompileError;
+
 /**
  * Thrown when bytecode transformation has failed.
  */
 public class CannotCompileException extends Exception {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     private Throwable myCause;
 
     /**
      * Gets the cause of this throwable.
      * It is for JDK 1.3 compatibility.
      */
-    public Throwable getCause() {
+    @Override
+    public synchronized Throwable getCause() {
         return (myCause == this ? null : myCause);
     }
 
@@ -34,6 +39,7 @@ public class CannotCompileException extends Exception {
      * Initializes the cause of this throwable.
      * It is for JDK 1.3 compatibility.
      */
+    @Override
     public synchronized Throwable initCause(Throwable cause) {
         myCause = cause;
         return this;
@@ -47,14 +53,13 @@ public class CannotCompileException extends Exception {
     public String getReason() {
         if (message != null)
             return message;
-        else
-            return this.toString();
+        return this.toString();
     }
 
     /**
      * Constructs a CannotCompileException with a message.
      *
-     * @param msg the message.
+     * @param msg       the message.
      */
     public CannotCompileException(String msg) {
         super(msg);
@@ -66,7 +71,7 @@ public class CannotCompileException extends Exception {
      * Constructs a CannotCompileException with an <code>Exception</code>
      * representing the cause.
      *
-     * @param e the cause.
+     * @param e     the cause.
      */
     public CannotCompileException(Throwable e) {
         super("by " + e.toString());
@@ -78,8 +83,8 @@ public class CannotCompileException extends Exception {
      * Constructs a CannotCompileException with a detailed message
      * and an <code>Exception</code> representing the cause.
      *
-     * @param msg the message.
-     * @param e   the cause.
+     * @param msg   the message.
+     * @param e     the cause.
      */
     public CannotCompileException(String msg, Throwable e) {
         this(msg);
@@ -97,7 +102,7 @@ public class CannotCompileException extends Exception {
     /**
      * Constructs a CannotCompileException with an <code>CompileError</code>.
      */
-    public CannotCompileException(org.hotswap.agent.javassist.compiler.CompileError e) {
+    public CannotCompileException(CompileError e) {
         this("[source error] " + e.getMessage(), e);
     }
 

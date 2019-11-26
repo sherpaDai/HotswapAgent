@@ -1,4 +1,32 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.tomcat;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.config.PluginConfiguration;
@@ -7,14 +35,6 @@ import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.util.PluginManagerInvoker;
 import org.hotswap.agent.util.ReflectionHelper;
 import org.hotswap.agent.util.classloader.WatchResourcesClassLoader;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Catalina servlet container support.
@@ -33,13 +53,33 @@ import java.util.Map;
 public class TomcatPlugin {
     private static AgentLogger LOGGER = AgentLogger.getLogger(TomcatPlugin.class);
 
+    // Supported class loaders extended from WebAppClassLoader
+    private static final String TOMCAT_WEBAPP_CLASS_LOADER = "org.apache.catalina.loader.WebappClassLoader";
+    private static final String TOMCAT_PARALLEL_WEBAPP_CLASS_LOADER = "org.apache.catalina.loader.ParallelWebappClassLoader";
+    private static final String GLASSFISH_WEBAPP_CLASS_LOADER = "org.glassfish.web.loader.WebappClassLoader";
+    private static final String TOMEE_WEBAPP_CLASS_LOADER = "org.apache.tomee.catalina.TomEEWebappClassLoader";
+    private static final String TOMCAT_EMBEDDED_WEBAPP_CLASS_LOADER = "org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader";
+
+    static final Set<String> supportedClassLoaders;
+
+    static {
+        supportedClassLoaders = new HashSet<>();
+        supportedClassLoaders.add(TOMCAT_WEBAPP_CLASS_LOADER);
+        supportedClassLoaders.add(TOMCAT_PARALLEL_WEBAPP_CLASS_LOADER);
+        supportedClassLoaders.add(GLASSFISH_WEBAPP_CLASS_LOADER);
+        supportedClassLoaders.add(TOMEE_WEBAPP_CLASS_LOADER);
+        supportedClassLoaders.add(TOMCAT_EMBEDDED_WEBAPP_CLASS_LOADER);
+    };
     private static final String WEB_INF_CLASSES = "/WEB-INF/classes/";
 
     // resolved tomcat version (6/7/8).
     int tomcatMajorVersion = 8;
 
     // tomcat associated resource object to a web application classloader
-    static Map<Object, ClassLoader> registeredResourcesMap = new HashMap<Object, ClassLoader>();
+    static Map<Object, ClassLoader> registeredResourcesMap = new HashMap<>();
+
+    // for each app classloader map of tomcat repository name to associated watch resource classloader
+    private static Map<ClassLoader, Map<String, ClassLoader>> extraRepositories = new HashMap<>();
 
     /**
      * Init the plugin during WebappLoader.start lifecycle. This method is invoked before the plugin is initialized.
@@ -47,10 +87,11 @@ public class TomcatPlugin {
      * @param resource tomcat resource associated to the classloader.
      */
     public static void init(ClassLoader appClassLoader, Object resource) {
+
         String version = resolveTomcatVersion(appClassLoader);
         int majorVersion = resolveTomcatMajorVersion(version);
 
-        if (appClassLoader.getClass().getName().equals("org.apache.catalina.loader.WebappClassLoader")) {
+        if (supportedClassLoaders.contains(appClassLoader.getClass().getName())) {
             registeredResourcesMap.put(resource, appClassLoader);
 
             // create plugin configuration in advance to get extraClasspath and watchResources properties
@@ -60,7 +101,7 @@ public class TomcatPlugin {
 
             URL[] extraClasspath = pluginConfiguration.getExtraClasspath();
             if (extraClasspath.length > 0) {
-                if (majorVersion > 7)
+                if (majorVersion >= 7)
                     watchResourcesClassLoader.initExtraPath(extraClasspath);
                 else
                     addRepositoriesAtStart(appClassLoader, extraClasspath, false);
@@ -69,7 +110,7 @@ public class TomcatPlugin {
 
             URL[] watchResources = pluginConfiguration.getWatchResources();
             if (watchResources.length > 0) {
-                if (majorVersion > 7)
+                if (majorVersion >= 7)
                     watchResourcesClassLoader.initWatchResources(watchResources, PluginManager.getInstance().getWatcher());
                 else
                     addRepositoriesAtStart(appClassLoader, watchResources, true);
@@ -78,11 +119,13 @@ public class TomcatPlugin {
             // register special repo
             getExtraRepositories(appClassLoader).put(WEB_INF_CLASSES, watchResourcesClassLoader);
 
-            // register special repo for webappDir
-            URL webappDir = pluginConfiguration.getWebappDir();
-            if (webappDir != null) {
+            URL[] webappDir = pluginConfiguration.getWebappDir();
+            if (webappDir.length > 0) {
+                for (URL url : webappDir) {
+                    LOGGER.debug("Watching 'webappDir' for changes: {}", url);
+                }
                 WatchResourcesClassLoader webappDirClassLoader = new WatchResourcesClassLoader(false);
-                webappDirClassLoader.initExtraPath(new URL[] {webappDir});
+                webappDirClassLoader.initExtraPath(webappDir);
 
                 getExtraRepositories(appClassLoader).put("/", webappDirClassLoader);
             }
@@ -90,26 +133,38 @@ public class TomcatPlugin {
 
         Object plugin = PluginManagerInvoker.callInitializePlugin(TomcatPlugin.class, appClassLoader);
         if (plugin != null) {
-            ReflectionHelper.invoke(plugin, plugin.getClass(), "init", new Class[]{String.class}, version);
+            ReflectionHelper.invoke(plugin, plugin.getClass(), "init", new Class[]{String.class, ClassLoader.class}, version, appClassLoader);
         } else {
             LOGGER.debug("TomcatPlugin is disabled in {}", appClassLoader);
         }
     }
 
     /**
-     * Init plugin and resolve major version
+     * Init plugin and resolve major version.
+     *
      * @param version tomcat version string
+     * @param classLoader the class loader
      */
-    private void init(String version) {
-        LOGGER.info("Tomcat plugin initialized - Tomcat version '{}'", version);
+    private void init(String version, ClassLoader appClassLoader ) {
+        if (appClassLoader.getClass().getName().equals(GLASSFISH_WEBAPP_CLASS_LOADER)) {
+            LOGGER.info("Tomcat plugin initialized - GlassFish embedded Tomcat version '{}'", version);
+        } else {
+            LOGGER.info("Tomcat plugin initialized - Tomcat version '{}'", version);
+        }
         tomcatMajorVersion = resolveTomcatMajorVersion(version);
     }
 
-
-    // for each app classloader map of tomcat repository name to associated watch resource classloader
-    private static Map<ClassLoader, Map<String, ClassLoader>> extraRepositories = new HashMap<ClassLoader,  Map<String, ClassLoader>>();
+    public static void close(ClassLoader classLoader) {
+        Map<String, ClassLoader> registerMap = extraRepositories.remove(classLoader);
+        if (registerMap != null) {
+            for (ClassLoader loader : registerMap.values()) {
+                PluginManager.getInstance().getWatcher().closeClassLoader(loader);
+            }
+        }
+    }
 
     private static void addRepositoriesAtStart(ClassLoader appClassLoader, URL[] newRepositories, boolean watchResources) {
+
         String[] currentRepositories = (String[]) ReflectionHelper.get(appClassLoader, "repositories");
         String[] repositories = new String[currentRepositories.length + newRepositories.length];
 
@@ -235,6 +290,9 @@ public class TomcatPlugin {
     private static String resolveTomcatVersion(ClassLoader appClassLoader) {
         try {
             Class serverInfo = appClassLoader.loadClass("org.apache.catalina.util.ServerInfo");
+            if (appClassLoader.getClass().getName().equals(GLASSFISH_WEBAPP_CLASS_LOADER)) {
+                return (String) ReflectionHelper.invoke(null, serverInfo, "getPublicServerInfo", new Class[]{});
+            }
             return (String) ReflectionHelper.invoke(null, serverInfo, "getServerNumber", new Class[]{});
         } catch (Exception e) {
             LOGGER.debug("Unable to resolve server version", e);

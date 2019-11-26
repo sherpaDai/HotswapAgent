@@ -16,25 +16,25 @@
 
 package org.hotswap.agent.javassist.compiler.ast;
 
+import org.hotswap.agent.javassist.compiler.CompileError;
+
 /**
  * String literal.
  */
 public class StringL extends ASTree {
+    /** default serialVersionUID */
+    private static final long serialVersionUID = 1L;
     protected String text;
 
     public StringL(String t) {
         text = t;
     }
 
-    public String get() {
-        return text;
-    }
+    public String get() { return text; }
 
-    public String toString() {
-        return "\"" + text + "\"";
-    }
+    @Override
+    public String toString() { return "\"" + text + "\""; }
 
-    public void accept(Visitor v) throws org.hotswap.agent.javassist.compiler.CompileError {
-        v.atStringL(this);
-    }
+    @Override
+    public void accept(Visitor v) throws CompileError { v.atStringL(this); }
 }

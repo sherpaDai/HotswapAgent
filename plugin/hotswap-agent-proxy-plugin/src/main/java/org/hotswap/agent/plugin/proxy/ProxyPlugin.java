@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.proxy;
 
 import java.util.HashSet;
@@ -15,6 +33,9 @@ import org.hotswap.agent.plugin.proxy.hscglib.CglibEnhancerProxyTransformer;
 import org.hotswap.agent.plugin.proxy.hscglib.CglibProxyTransformer;
 import org.hotswap.agent.plugin.proxy.hscglib.GeneratorParametersTransformer;
 import org.hotswap.agent.plugin.proxy.hscglib.GeneratorParams;
+import org.hotswap.agent.util.ReflectionHelper;
+import org.hotswap.agent.util.classloader.ClassLoaderHelper;
+import org.hotswap.agent.watch.WatcherFactory;
 
 /**
  * Redefines proxy classes that implement or extend changed interfaces or classes. Currently it supports proxies created
@@ -26,7 +47,7 @@ import org.hotswap.agent.plugin.proxy.hscglib.GeneratorParams;
 @Plugin(name = "Proxy", description = "Redefines proxies", testedVersions = { "" }, expectedVersions = { "all" }, supportClass = RedefinitionScheduler.class)
 public class ProxyPlugin {
     private static AgentLogger LOGGER = AgentLogger.getLogger(ProxyPlugin.class);
-    static boolean isJava8OrNewer = getVersion() >= 18;
+    static boolean isJava8OrNewer = WatcherFactory.JAVA_VERSION >= 18;
 
     /**
      * Flag to check reload status. In unit test we need to wait for reload
@@ -41,11 +62,25 @@ public class ProxyPlugin {
     public static void transformJavaProxy(final Class<?> classBeingRedefined, final ClassLoader classLoader) {
 
     /*
-     * We can't redefine proxy directly (and return new proxy class bytes) in this method since the classLoader contains
-     * OLD definition of proxie's interface. Therefore proxy is defined in deferred command after proxied interface is redefined
-     * in DCEVM. It follows that there must be a delay between interface redefinition and proxy redefinition.
-     *
+     * Proxy can't be redefined directly in this method (and return new proxy class bytes), since the classLoader contains
+     * OLD definition of proxie's interface. Therefore proxy is defined in deferred command (after some delay)
+     * after proxied interface is redefined in DCEVM.
      */
+        Object proxyCache = ReflectionHelper.getNoException(null, java.lang.reflect.Proxy.class, "proxyCache");
+
+        if (proxyCache != null) {
+            try {
+                ReflectionHelper.invoke(proxyCache, proxyCache.getClass().getSuperclass(), "removeAll",
+                        new Class[] { ClassLoader.class }, classLoader);
+            } catch (IllegalArgumentException e) {
+                LOGGER.error("Reflection proxy cache flush failed. {}", e.getMessage());
+            }
+        }
+
+        if (!ClassLoaderHelper.isClassLoderStarted(classLoader)) {
+            return;
+        }
+
         final String className = classBeingRedefined.getName();
 
         if (proxyRedefiningMap.contains(className)) {
@@ -63,49 +98,17 @@ public class ProxyPlugin {
         PluginManager.getInstance().getScheduler().scheduleCommand(new ReloadJavaProxyCommand(classLoader, className, signatureMapOrig), 50);
     }
 
-//    @OnClassLoadEvent(classNameRegexp = "com/sun/proxy/\\$Proxy.*", events = LoadEvent.REDEFINE, skipSynthetic = false)
-//    public static byte[] transformJavaProxy(final Class<?> classBeingRedefined, final byte[] classfileBuffer,
-//            final ClassPool cp, final CtClass cc) throws IllegalClassFormatException, IOException, RuntimeException {
-//        try {
-//            return JavassistProxyTransformer.transform(classBeingRedefined, classfileBuffer, cc, cp);
-//        } catch (Exception e) {
-//            LOGGER.error("Error redifining Cglib proxy {}", e, classBeingRedefined.getName());
-//        }
-//        return classfileBuffer;
-//    }
-
-    // alternative method of redefining Java proxies, uses a new classlaoder instance
-    // @OnClassLoadEvent(classNameRegexp = "com/sun/proxy/\\$Proxy.*", events = LoadEvent.REDEFINE, skipSynthetic =
-    // false)
-    // public static byte[] transformJavaProxy(final Class<?> classBeingRedefined, final byte[] classfileBuffer,
-    // final ClassLoader loader) throws IllegalClassFormatException, IOException, RuntimeException {
-    // try {
-    // return NewClassLoaderJavaProxyTransformer.transform(classBeingRedefined, classfileBuffer, loader);
-    // } catch (Exception e) {
-    // LOGGER.error("Error redifining Cglib proxy {}", e, classBeingRedefined.getName());
-    // }
-    // return classfileBuffer;
-    // }
-    //
-    // // alternative method of redefining Java proxies, uses a 2 step process. Crashed with jvm8
-    // @OnClassLoadEvent(classNameRegexp = "com/sun/proxy/\\$Proxy.*", events = LoadEvent.REDEFINE, skipSynthetic =
-    // false)
-    // public static byte[] transformJavaProxy(final Class<?> classBeingRedefined, final byte[] classfileBuffer,
-    // final ClassPool cp) {
-    // try {
-    // return JavaProxyTransformer.transform(classBeingRedefined, cp, classfileBuffer);
-    // } catch (Exception e) {
-    // LOGGER.error("Error redifining Cglib proxy {}", e, classBeingRedefined.getName());
-    // }
-    // return classfileBuffer;
-    // }
-
     @OnClassLoadEvent(classNameRegexp = ".*", events = LoadEvent.REDEFINE, skipSynthetic = false)
     public static byte[] transformCglibProxy(final Class<?> classBeingRedefined, final byte[] classfileBuffer,
             final ClassLoader loader, final ClassPool cp) throws Exception {
+
         GeneratorParams generatorParams = GeneratorParametersTransformer.getGeneratorParams(loader, classBeingRedefined.getName());
 
         if (generatorParams == null) {
+            return classfileBuffer;
+        }
+
+        if (!ClassLoaderHelper.isClassLoderStarted(loader)) {
             return classfileBuffer;
         }
 
@@ -145,15 +148,4 @@ public class ProxyPlugin {
         }
         return cc;
     }
-
-    private static int getVersion() {
-        String version = System.getProperty("java.version");
-        int pos = 0, count = 0;
-        for (; pos < version.length() && count < 2; pos++) {
-            if (version.charAt(pos) == '.')
-                count++;
-        }
-        return Integer.valueOf(version.substring(0, pos).replace(".", ""));
-    }
-
 }

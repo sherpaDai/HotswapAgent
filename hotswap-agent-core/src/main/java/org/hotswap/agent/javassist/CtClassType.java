@@ -16,34 +16,63 @@
 
 package org.hotswap.agent.javassist;
 
-import org.hotswap.agent.javassist.bytecode.*;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.hotswap.agent.javassist.bytecode.AccessFlag;
+import org.hotswap.agent.javassist.bytecode.AnnotationsAttribute;
+import org.hotswap.agent.javassist.bytecode.AttributeInfo;
+import org.hotswap.agent.javassist.bytecode.BadBytecode;
+import org.hotswap.agent.javassist.bytecode.Bytecode;
+import org.hotswap.agent.javassist.bytecode.ClassFile;
+import org.hotswap.agent.javassist.bytecode.CodeAttribute;
+import org.hotswap.agent.javassist.bytecode.CodeIterator;
+import org.hotswap.agent.javassist.bytecode.ConstPool;
+import org.hotswap.agent.javassist.bytecode.ConstantAttribute;
+import org.hotswap.agent.javassist.bytecode.Descriptor;
+import org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute;
+import org.hotswap.agent.javassist.bytecode.FieldInfo;
+import org.hotswap.agent.javassist.bytecode.InnerClassesAttribute;
+import org.hotswap.agent.javassist.bytecode.MethodInfo;
+import org.hotswap.agent.javassist.bytecode.ParameterAnnotationsAttribute;
+import org.hotswap.agent.javassist.bytecode.SignatureAttribute;
 import org.hotswap.agent.javassist.bytecode.annotation.Annotation;
+import org.hotswap.agent.javassist.compiler.AccessorMaker;
 import org.hotswap.agent.javassist.compiler.CompileError;
 import org.hotswap.agent.javassist.compiler.Javac;
 import org.hotswap.agent.javassist.expr.ExprEditor;
 
-import java.io.*;
-import java.lang.ref.WeakReference;
-import java.net.URL;
-import java.util.*;
-
 /**
- * Class types.
+ * Class<?> types.
  */
-class CtClassType extends org.hotswap.agent.javassist.CtClass {
+class CtClassType extends CtClass {
     ClassPool classPool;
     boolean wasChanged;
     private boolean wasFrozen;
     boolean wasPruned;
-    boolean gcConstPool;    // if true, the constant pool entries will be garbage collected. 
+    boolean gcConstPool;    // if true, the constant pool entries will be garbage collected.
     ClassFile classfile;
     byte[] rawClassfile;    // backup storage
 
-    private WeakReference memberCache;
-    private org.hotswap.agent.javassist.compiler.AccessorMaker accessors;
+    private Reference<CtMember.Cache> memberCache;
+    private AccessorMaker accessors;
 
     private FieldInitLink fieldInitializers;
-    private Hashtable hiddenMethods;    // must be synchronous
+    private Map<CtMethod,String> hiddenMethods;    // must be synchronous
     private int uniqueNumberSeed;
 
     private boolean doPruning = ClassPool.doPruning;
@@ -65,11 +94,18 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
     }
 
     CtClassType(InputStream ins, ClassPool cp) throws IOException {
-        this((String) null, cp);
+        this((String)null, cp);
         classfile = new ClassFile(new DataInputStream(ins));
         qualifiedName = classfile.getName();
     }
 
+    CtClassType(ClassFile cf, ClassPool cp) {
+        this((String)null, cp);
+        classfile = cf;
+        qualifiedName = classfile.getName();
+    }
+
+    @Override
     protected void extendToString(StringBuffer buffer) {
         if (wasChanged)
             buffer.append("changed ");
@@ -80,23 +116,24 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         if (wasPruned)
             buffer.append("pruned ");
 
-        buffer.append(org.hotswap.agent.javassist.Modifier.toString(getModifiers()));
+        buffer.append(Modifier.toString(getModifiers()));
         buffer.append(" class ");
         buffer.append(getName());
 
         try {
-            org.hotswap.agent.javassist.CtClass ext = getSuperclass();
+            CtClass ext = getSuperclass();
             if (ext != null) {
                 String name = ext.getName();
                 if (!name.equals("java.lang.Object"))
                     buffer.append(" extends " + ext.getName());
             }
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        }
+        catch (NotFoundException e) {
             buffer.append(" extends ??");
         }
 
         try {
-            org.hotswap.agent.javassist.CtClass[] intf = getInterfaces();
+            CtClass[] intf = getInterfaces();
             if (intf.length > 0)
                 buffer.append(" implements ");
 
@@ -104,21 +141,22 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                 buffer.append(intf[i].getName());
                 buffer.append(", ");
             }
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+        }
+        catch (NotFoundException e) {
             buffer.append(" extends ??");
         }
 
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
+        CtMember.Cache memCache = getMembers();
         exToString(buffer, " fields=",
                 memCache.fieldHead(), memCache.lastField());
         exToString(buffer, " constructors=",
                 memCache.consHead(), memCache.lastCons());
         exToString(buffer, " methods=",
-                memCache.methodHead(), memCache.lastMethod());
+                   memCache.methodHead(), memCache.lastMethod());
     }
 
     private void exToString(StringBuffer buffer, String msg,
-                            org.hotswap.agent.javassist.CtMember head, org.hotswap.agent.javassist.CtMember tail) {
+                            CtMember head, CtMember tail) {
         buffer.append(msg);
         while (head != tail) {
             head = head.next();
@@ -127,27 +165,36 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         }
     }
 
-    public org.hotswap.agent.javassist.compiler.AccessorMaker getAccessorMaker() {
+    @Override
+    public AccessorMaker getAccessorMaker() {
         if (accessors == null)
-            accessors = new org.hotswap.agent.javassist.compiler.AccessorMaker(this);
+            accessors = new AccessorMaker(this);
 
         return accessors;
     }
 
+    @Override
     public ClassFile getClassFile2() {
+        return getClassFile3(true);
+    }
+
+    public ClassFile getClassFile3(boolean doCompress) {
         ClassFile cfile = classfile;
         if (cfile != null)
             return cfile;
 
-        classPool.compress();
+        if (doCompress)
+            classPool.compress();
+
         if (rawClassfile != null) {
             try {
-                classfile = new ClassFile(new DataInputStream(
-                        new ByteArrayInputStream(rawClassfile)));
+                ClassFile cf = new ClassFile(new DataInputStream(
+                                             new ByteArrayInputStream(rawClassfile)));
                 rawClassfile = null;
                 getCount = GET_THRESHOLD;
-                return classfile;
-            } catch (IOException e) {
+                return setClassFile(cf);
+            }
+            catch (IOException e) {
                 throw new RuntimeException(e.toString(), e);
             }
         }
@@ -156,7 +203,7 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         try {
             fin = classPool.openClassfile(getName());
             if (fin == null)
-                throw new org.hotswap.agent.javassist.NotFoundException(getName());
+                throw new NotFoundException(getName());
 
             fin = new BufferedInputStream(fin);
             ClassFile cf = new ClassFile(new DataInputStream(fin));
@@ -165,51 +212,53 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                         + cf.getName() + " found in "
                         + qualifiedName.replace('.', '/') + ".class");
 
-            classfile = cf;
-            return cf;
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+            return setClassFile(cf);
+        }
+        catch (NotFoundException e) {
             throw new RuntimeException(e.toString(), e);
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             throw new RuntimeException(e.toString(), e);
-        } finally {
+        }
+        finally {
             if (fin != null)
                 try {
                     fin.close();
-                } catch (IOException e) {
                 }
+                catch (IOException e) {}
         }
     }
 
-    /* Inherited from CtClass.  Called by get() in ClassPool.
-     *
-     * @see CtClass#incGetCounter()
-     * @see #toBytecode(DataOutputStream)
-     */
-    final void incGetCounter() {
-        ++getCount;
-    }
+   /* Inherited from CtClass.  Called by get() in ClassPool.
+    *
+    * @see javassist.CtClass#incGetCounter()
+    * @see #toBytecode(DataOutputStream)
+    */
+    @Override
+   final void incGetCounter() { ++getCount; }
 
-    /**
-     * Invoked from ClassPool#compress().
-     * It releases the class files that have not been recently used
-     * if they are unmodified.
-     */
-    void compress() {
-        if (getCount < GET_THRESHOLD)
-            if (!isModified() && ClassPool.releaseUnmodifiedClassFile)
-                removeClassFile();
-            else if (isFrozen() && !wasPruned)
-                saveClassFile();
+   /**
+    * Invoked from ClassPool#compress().
+    * It releases the class files that have not been recently used
+    * if they are unmodified.
+    */
+    @Override
+   void compress() {
+       if (getCount < GET_THRESHOLD)
+           if (!isModified() && ClassPool.releaseUnmodifiedClassFile)
+               removeClassFile();
+           else if (isFrozen() && !wasPruned)
+               saveClassFile();
 
-        getCount = 0;
-    }
+       getCount = 0;
+   }
 
-    /**
+   /**
      * Converts a ClassFile object into a byte array
      * for saving memory space.
      */
     private synchronized void saveClassFile() {
-        /* getMembers() and releaseClassFile() are also synchronized.
+        /* getMembers() and removeClassFile() are also synchronized.
          */
         if (classfile == null || hasMemberCache() != null)
             return;
@@ -221,8 +270,8 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             barray.close();
             rawClassfile = barray.toByteArray();
             classfile = null;
-        } catch (IOException e) {
         }
+        catch (IOException e) {}
     }
 
     private synchronized void removeClassFile() {
@@ -230,34 +279,39 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             classfile = null;
     }
 
-    public ClassPool getClassPool() {
-        return classPool;
+    /**
+     * Updates {@code classfile} if it is null.
+     */
+    private synchronized ClassFile setClassFile(ClassFile cf) {
+        if (classfile == null)
+            classfile = cf;
+
+        return classfile;
     }
 
-    void setClassPool(ClassPool cp) {
-        classPool = cp;
-    }
+    @Override
+    public ClassPool getClassPool() { return classPool; }
 
-    public URL getURL() throws org.hotswap.agent.javassist.NotFoundException {
+    void setClassPool(ClassPool cp) { classPool = cp; }
+
+    @Override
+    public URL getURL() throws NotFoundException {
         URL url = classPool.find(getName());
         if (url == null)
-            throw new org.hotswap.agent.javassist.NotFoundException(getName());
-        else
-            return url;
+            throw new NotFoundException(getName());
+        return url;
     }
 
-    public boolean isModified() {
-        return wasChanged;
-    }
+    @Override
+    public boolean isModified() { return wasChanged; }
 
-    public boolean isFrozen() {
-        return wasFrozen;
-    }
+    @Override
+    public boolean isFrozen() { return wasFrozen; }
 
-    public void freeze() {
-        wasFrozen = true;
-    }
+    @Override
+    public void freeze() { wasFrozen = true; }
 
+    @Override
     void checkModify() throws RuntimeException {
         if (isFrozen()) {
             String msg = getName() + " class is frozen";
@@ -270,12 +324,14 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         wasChanged = true;
     }
 
+    @Override
     public void defrost() {
         checkPruned("defrost");
         wasFrozen = false;
     }
 
-    public boolean subtypeOf(org.hotswap.agent.javassist.CtClass clazz) throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public boolean subtypeOf(CtClass clazz) throws NotFoundException {
         int i;
         String cname = clazz.getName();
         if (this == clazz || getName().equals(cname))
@@ -302,6 +358,7 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         return false;
     }
 
+    @Override
     public void setName(String name) throws RuntimeException {
         String oldname = getName();
         if (name.equals(oldname))
@@ -316,23 +373,27 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         classPool.classNameChanged(oldname, this);
     }
 
+    @Override
     public String getGenericSignature() {
         SignatureAttribute sa
-                = (SignatureAttribute) getClassFile2().getAttribute(SignatureAttribute.tag);
+            = (SignatureAttribute)getClassFile2().getAttribute(SignatureAttribute.tag);
         return sa == null ? null : sa.getSignature();
     }
 
+    @Override
     public void setGenericSignature(String sig) {
         ClassFile cf = getClassFile();
         SignatureAttribute sa = new SignatureAttribute(cf.getConstPool(), sig);
         cf.addAttribute(sa);
     }
 
+    @Override
     public void replaceClassName(ClassMap classnames)
-            throws RuntimeException {
+        throws RuntimeException
+    {
         String oldClassName = getName();
         String newClassName
-                = (String) classnames.get(Descriptor.toJvmName(oldClassName));
+            = classnames.get(Descriptor.toJvmName(oldClassName));
         if (newClassName != null) {
             newClassName = Descriptor.toJavaName(newClassName);
             // check this in advance although classNameChanged() below does.
@@ -350,8 +411,10 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         }
     }
 
+    @Override
     public void replaceClassName(String oldname, String newname)
-            throws RuntimeException {
+        throws RuntimeException
+    {
         String thisname = getName();
         if (thisname.equals(oldname))
             setName(newname);
@@ -362,39 +425,54 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         }
     }
 
+    @Override
     public boolean isInterface() {
-        return org.hotswap.agent.javassist.Modifier.isInterface(getModifiers());
+        return Modifier.isInterface(getModifiers());
     }
 
+    @Override
     public boolean isAnnotation() {
-        return org.hotswap.agent.javassist.Modifier.isAnnotation(getModifiers());
+        return Modifier.isAnnotation(getModifiers());
     }
 
+    @Override
     public boolean isEnum() {
-        return org.hotswap.agent.javassist.Modifier.isEnum(getModifiers());
+       return Modifier.isEnum(getModifiers());
     }
 
+    @Override
     public int getModifiers() {
         ClassFile cf = getClassFile2();
         int acc = cf.getAccessFlags();
         acc = AccessFlag.clear(acc, AccessFlag.SUPER);
         int inner = cf.getInnerAccessFlags();
-        if (inner != -1 && (inner & AccessFlag.STATIC) != 0)
-            acc |= AccessFlag.STATIC;
-
+        if (inner != -1) {
+            if ((inner & AccessFlag.STATIC) != 0)
+                acc |= AccessFlag.STATIC;
+            if ((inner & AccessFlag.PUBLIC) != 0)
+                acc |= AccessFlag.PUBLIC;
+            else {
+                acc &= ~AccessFlag.PUBLIC; //clear PUBLIC
+                if ((inner & AccessFlag.PROTECTED) != 0)
+                    acc |= AccessFlag.PROTECTED;
+                else if ((inner & AccessFlag.PRIVATE) != 0)
+                    acc |= AccessFlag.PRIVATE;
+            }
+        }
         return AccessFlag.toModifier(acc);
     }
 
-    public org.hotswap.agent.javassist.CtClass[] getNestedClasses() throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public CtClass[] getNestedClasses() throws NotFoundException {
         ClassFile cf = getClassFile2();
         InnerClassesAttribute ica
-                = (InnerClassesAttribute) cf.getAttribute(InnerClassesAttribute.tag);
+            = (InnerClassesAttribute)cf.getAttribute(InnerClassesAttribute.tag);
         if (ica == null)
-            return new org.hotswap.agent.javassist.CtClass[0];
+            return new CtClass[0];
 
         String thisName = cf.getName() + "$";
         int n = ica.tableLength();
-        ArrayList list = new ArrayList(n);
+        List<CtClass> list = new ArrayList<CtClass>(n);
         for (int i = 0; i < n; i++) {
             String name = ica.innerClass(i);
             if (name != null)
@@ -405,34 +483,78 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                 }
         }
 
-        return (org.hotswap.agent.javassist.CtClass[]) list.toArray(new org.hotswap.agent.javassist.CtClass[list.size()]);
+        return list.toArray(new CtClass[list.size()]);
     }
 
+    @Override
     public void setModifiers(int mod) {
+        checkModify();
+        updateInnerEntry(mod, getName(), this, true);
         ClassFile cf = getClassFile2();
-        if (org.hotswap.agent.javassist.Modifier.isStatic(mod)) {
-            int flags = cf.getInnerAccessFlags();
-            if (flags != -1 && (flags & AccessFlag.STATIC) != 0)
-                mod = mod & ~org.hotswap.agent.javassist.Modifier.STATIC;
-            else
-                throw new RuntimeException("cannot change " + getName() + " into a static class");
+        cf.setAccessFlags(AccessFlag.of(mod & ~Modifier.STATIC));
+    }
+
+    private static void updateInnerEntry(int newMod, String name, CtClass clazz, boolean outer) {
+        ClassFile cf = clazz.getClassFile2();
+        InnerClassesAttribute ica
+            = (InnerClassesAttribute)cf.getAttribute(InnerClassesAttribute.tag);
+        if (ica != null) {
+            // If the class is a static inner class, its modifier
+            // does not contain the static bit.  Its inner class attribute
+            // contains the static bit.
+            int mod = newMod & ~Modifier.STATIC;
+            int i = ica.find(name);
+            if (i >= 0) {
+                int isStatic = ica.accessFlags(i) & AccessFlag.STATIC;
+                if (isStatic != 0 || !Modifier.isStatic(newMod)) {
+                    clazz.checkModify();
+                    ica.setAccessFlags(i, AccessFlag.of(mod) | isStatic);
+                    String outName = ica.outerClass(i);
+                    if (outName != null && outer)
+                        try {
+                            CtClass parent = clazz.getClassPool().get(outName);
+                            updateInnerEntry(mod, name, parent, false);
+                        }
+                        catch (NotFoundException e) {
+                            throw new RuntimeException("cannot find the declaring class: "
+                                                       + outName);
+                        }
+
+                    return;
+                }
+            }
         }
 
-        checkModify();
-        cf.setAccessFlags(AccessFlag.of(mod));
+        if (Modifier.isStatic(newMod))
+            throw new RuntimeException("cannot change " + Descriptor.toJavaName(name)
+                                       + " into a static class");
     }
 
-    public boolean hasAnnotation(Class clz) {
+    @Override
+    public boolean hasAnnotation(String annotationName) {
         ClassFile cf = getClassFile2();
         AnnotationsAttribute ainfo = (AnnotationsAttribute)
                 cf.getAttribute(AnnotationsAttribute.invisibleTag);
         AnnotationsAttribute ainfo2 = (AnnotationsAttribute)
                 cf.getAttribute(AnnotationsAttribute.visibleTag);
-        return hasAnnotationType(clz, getClassPool(), ainfo, ainfo2);
+        return hasAnnotationType(annotationName, getClassPool(), ainfo, ainfo2);
     }
 
-    static boolean hasAnnotationType(Class clz, ClassPool cp,
-                                     AnnotationsAttribute a1, AnnotationsAttribute a2) {
+    /**
+     * @deprecated
+     */
+    @Deprecated
+    static boolean hasAnnotationType(Class<?> clz, ClassPool cp,
+                                     AnnotationsAttribute a1,
+                                     AnnotationsAttribute a2)
+    {
+        return hasAnnotationType(clz.getName(), cp, a1, a2);
+    }
+
+    static boolean hasAnnotationType(String annotationTypeName, ClassPool cp,
+                                     AnnotationsAttribute a1,
+                                     AnnotationsAttribute a2)
+    {
         Annotation[] anno1, anno2;
 
         if (a1 == null)
@@ -445,21 +567,21 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         else
             anno2 = a2.getAnnotations();
 
-        String typeName = clz.getName();
         if (anno1 != null)
             for (int i = 0; i < anno1.length; i++)
-                if (anno1[i].getTypeName().equals(typeName))
+                if (anno1[i].getTypeName().equals(annotationTypeName))
                     return true;
 
         if (anno2 != null)
             for (int i = 0; i < anno2.length; i++)
-                if (anno2[i].getTypeName().equals(typeName))
+                if (anno2[i].getTypeName().equals(annotationTypeName))
                     return true;
 
         return false;
     }
 
-    public Object getAnnotation(Class clz) throws ClassNotFoundException {
+    @Override
+    public Object getAnnotation(Class<?> clz) throws ClassNotFoundException {
         ClassFile cf = getClassFile2();
         AnnotationsAttribute ainfo = (AnnotationsAttribute)
                 cf.getAttribute(AnnotationsAttribute.invisibleTag);
@@ -468,9 +590,10 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         return getAnnotationType(clz, getClassPool(), ainfo, ainfo2);
     }
 
-    static Object getAnnotationType(Class clz, ClassPool cp,
+    static Object getAnnotationType(Class<?> clz, ClassPool cp,
                                     AnnotationsAttribute a1, AnnotationsAttribute a2)
-            throws ClassNotFoundException {
+        throws ClassNotFoundException
+    {
         Annotation[] anno1, anno2;
 
         if (a1 == null)
@@ -485,32 +608,36 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
 
         String typeName = clz.getName();
         if (anno1 != null)
-            for (int i = 0; i < anno1.length; i++)
-                if (anno1[i].getTypeName().equals(typeName))
-                    return toAnnoType(anno1[i], cp);
+           for (int i = 0; i < anno1.length; i++)
+              if (anno1[i].getTypeName().equals(typeName))
+                  return toAnnoType(anno1[i], cp);
 
         if (anno2 != null)
-            for (int i = 0; i < anno2.length; i++)
-                if (anno2[i].getTypeName().equals(typeName))
-                    return toAnnoType(anno2[i], cp);
+           for (int i = 0; i < anno2.length; i++)
+              if (anno2[i].getTypeName().equals(typeName))
+                  return toAnnoType(anno2[i], cp);
 
         return null;
     }
 
+    @Override
     public Object[] getAnnotations() throws ClassNotFoundException {
-        return getAnnotations(false);
+       return getAnnotations(false);
     }
 
-    public Object[] getAvailableAnnotations() {
-        try {
-            return getAnnotations(true);
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException("Unexpected exception ", e);
-        }
+    @Override
+    public Object[] getAvailableAnnotations(){
+       try {
+           return getAnnotations(true);
+       }
+       catch (ClassNotFoundException e) {
+           throw new RuntimeException("Unexpected exception ", e);
+       }
     }
 
     private Object[] getAnnotations(boolean ignoreNotFound)
-            throws ClassNotFoundException {
+        throws ClassNotFoundException
+    {
         ClassFile cf = getClassFile2();
         AnnotationsAttribute ainfo = (AnnotationsAttribute)
                 cf.getAttribute(AnnotationsAttribute.invisibleTag);
@@ -520,15 +647,17 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
     }
 
     static Object[] toAnnotationType(boolean ignoreNotFound, ClassPool cp,
-                                     AnnotationsAttribute a1, AnnotationsAttribute a2)
-            throws ClassNotFoundException {
+                             AnnotationsAttribute a1, AnnotationsAttribute a2)
+        throws ClassNotFoundException
+    {
         Annotation[] anno1, anno2;
         int size1, size2;
 
         if (a1 == null) {
             anno1 = null;
             size1 = 0;
-        } else {
+        }
+        else {
             anno1 = a1.getAnnotations();
             size1 = anno1.length;
         }
@@ -536,44 +665,43 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         if (a2 == null) {
             anno2 = null;
             size2 = 0;
-        } else {
+        }
+        else {
             anno2 = a2.getAnnotations();
             size2 = anno2.length;
         }
 
-        if (!ignoreNotFound) {
-            Object[] result = new Object[size1 + size2];
-            for (int i = 0; i < size1; i++)
-                result[i] = toAnnoType(anno1[i], cp);
+        if (!ignoreNotFound){
+           Object[] result = new Object[size1 + size2];
+           for (int i = 0; i < size1; i++)
+               result[i] = toAnnoType(anno1[i], cp);
 
-            for (int j = 0; j < size2; j++)
-                result[j + size1] = toAnnoType(anno2[j], cp);
+           for (int j = 0; j < size2; j++)
+               result[j + size1] = toAnnoType(anno2[j], cp);
 
-            return result;
-        } else {
-            ArrayList annotations = new ArrayList();
-            for (int i = 0; i < size1; i++) {
-                try {
-                    annotations.add(toAnnoType(anno1[i], cp));
-                } catch (ClassNotFoundException e) {
-                }
-            }
-            for (int j = 0; j < size2; j++) {
-                try {
-                    annotations.add(toAnnoType(anno2[j], cp));
-                } catch (ClassNotFoundException e) {
-                }
-            }
-
-            return annotations.toArray();
+           return result;
         }
+       List<Object> annotations = new ArrayList<Object>();
+       for (int i = 0 ; i < size1 ; i++)
+          try{
+             annotations.add(toAnnoType(anno1[i], cp));
+          }
+          catch(ClassNotFoundException e){}
+       for (int j = 0; j < size2; j++)
+          try{
+             annotations.add(toAnnoType(anno2[j], cp));
+          }
+          catch(ClassNotFoundException e){}
+
+       return annotations.toArray();
     }
 
     static Object[][] toAnnotationType(boolean ignoreNotFound, ClassPool cp,
                                        ParameterAnnotationsAttribute a1,
                                        ParameterAnnotationsAttribute a2,
                                        MethodInfo minfo)
-            throws ClassNotFoundException {
+        throws ClassNotFoundException
+    {
         int numParameters = 0;
         if (a1 != null)
             numParameters = a1.numParameters();
@@ -590,7 +718,8 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             if (a1 == null) {
                 anno1 = null;
                 size1 = 0;
-            } else {
+            }
+            else {
                 anno1 = a1.getAnnotations()[i];
                 size1 = anno1.length;
             }
@@ -598,31 +727,33 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             if (a2 == null) {
                 anno2 = null;
                 size2 = 0;
-            } else {
+            }
+            else {
                 anno2 = a2.getAnnotations()[i];
                 size2 = anno2.length;
             }
 
-            if (!ignoreNotFound) {
+            if (!ignoreNotFound){
                 result[i] = new Object[size1 + size2];
                 for (int j = 0; j < size1; ++j)
                     result[i][j] = toAnnoType(anno1[j], cp);
 
                 for (int j = 0; j < size2; ++j)
                     result[i][j + size1] = toAnnoType(anno2[j], cp);
-            } else {
-                ArrayList annotations = new ArrayList();
-                for (int j = 0; j < size1; j++) {
-                    try {
+            }
+            else{
+                List<Object> annotations = new ArrayList<Object>();
+                for (int j = 0 ; j < size1 ; j++){
+                    try{
                         annotations.add(toAnnoType(anno1[j], cp));
-                    } catch (ClassNotFoundException e) {
                     }
+                    catch(ClassNotFoundException e){}
                 }
-                for (int j = 0; j < size2; j++) {
-                    try {
+                for (int j = 0; j < size2; j++){
+                    try{
                         annotations.add(toAnnoType(anno2[j], cp));
-                    } catch (ClassNotFoundException e) {
                     }
+                    catch(ClassNotFoundException e){}
                 }
 
                 result[i] = annotations.toArray();
@@ -633,22 +764,38 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
     }
 
     private static Object toAnnoType(Annotation anno, ClassPool cp)
-            throws ClassNotFoundException {
+        throws ClassNotFoundException
+    {
         try {
             ClassLoader cl = cp.getClassLoader();
             return anno.toAnnotationType(cl, cp);
-        } catch (ClassNotFoundException e) {
+        }
+        catch (ClassNotFoundException e) {
             ClassLoader cl2 = cp.getClass().getClassLoader();
-            return anno.toAnnotationType(cl2, cp);
+            try {
+                return anno.toAnnotationType(cl2, cp);
+            }
+            catch (ClassNotFoundException e2){
+                try {
+                    Class<?> clazz = cp.get(anno.getTypeName()).toClass();
+                    return org.hotswap.agent.javassist.bytecode.annotation.AnnotationImpl.make(
+                                            clazz.getClassLoader(),
+                                            clazz, cp, anno);
+                }
+                catch (Throwable e3) {
+                    throw new ClassNotFoundException(anno.getTypeName());
+                }
+            }
         }
     }
 
-    public boolean subclassOf(org.hotswap.agent.javassist.CtClass superclass) {
+    @Override
+    public boolean subclassOf(CtClass superclass) {
         if (superclass == null)
             return false;
 
         String superName = superclass.getName();
-        org.hotswap.agent.javassist.CtClass curr = this;
+        CtClass curr = this;
         try {
             while (curr != null) {
                 if (curr.getName().equals(superName))
@@ -656,20 +803,26 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
 
                 curr = curr.getSuperclass();
             }
-        } catch (Exception ignored) {
         }
+        catch (Exception ignored) {}
         return false;
     }
 
-    public org.hotswap.agent.javassist.CtClass getSuperclass() throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public CtClass getSuperclass() throws NotFoundException {
         String supername = getClassFile2().getSuperclass();
         if (supername == null)
             return null;
-        else
-            return classPool.get(supername);
+        return classPool.get(supername);
     }
 
-    public void setSuperclass(org.hotswap.agent.javassist.CtClass clazz) throws org.hotswap.agent.javassist.CannotCompileException {
+    @Override
+    public String getSuperclassName() throws NotFoundException {
+        return getClassFile2().getSuperclass();
+    }
+
+    @Override
+    public void setSuperclass(CtClass clazz) throws CannotCompileException {
         checkModify();
         if (isInterface())
             addInterface(clazz);
@@ -677,17 +830,19 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             getClassFile2().setSuperclass(clazz.getName());
     }
 
-    public org.hotswap.agent.javassist.CtClass[] getInterfaces() throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public CtClass[] getInterfaces() throws NotFoundException {
         String[] ifs = getClassFile2().getInterfaces();
         int num = ifs.length;
-        org.hotswap.agent.javassist.CtClass[] ifc = new org.hotswap.agent.javassist.CtClass[num];
+        CtClass[] ifc = new CtClass[num];
         for (int i = 0; i < num; ++i)
             ifc[i] = classPool.get(ifs[i]);
 
         return ifc;
     }
 
-    public void setInterfaces(org.hotswap.agent.javassist.CtClass[] list) {
+    @Override
+    public void setInterfaces(CtClass[] list) {
         checkModify();
         String[] ifs;
         if (list == null)
@@ -702,16 +857,18 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         getClassFile2().setInterfaces(ifs);
     }
 
-    public void addInterface(org.hotswap.agent.javassist.CtClass anInterface) {
+    @Override
+    public void addInterface(CtClass anInterface) {
         checkModify();
         if (anInterface != null)
             getClassFile2().addInterface(anInterface.getName());
     }
 
-    public org.hotswap.agent.javassist.CtClass getDeclaringClass() throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public CtClass getDeclaringClass() throws NotFoundException {
         ClassFile cf = getClassFile2();
-        InnerClassesAttribute ica = (InnerClassesAttribute) cf.getAttribute(
-                InnerClassesAttribute.tag);
+        InnerClassesAttribute ica = (InnerClassesAttribute)cf.getAttribute(
+                                                InnerClassesAttribute.tag);
         if (ica == null)
             return null;
 
@@ -722,50 +879,85 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                 String outName = ica.outerClass(i);
                 if (outName != null)
                     return classPool.get(outName);
-                else {
-                    // maybe anonymous or local class.
-                    org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute ema
-                            = (org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute) cf.getAttribute(
-                            org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute.tag);
-                    if (ema != null)
-                        return classPool.get(ema.className());
-                }
+
+                // maybe anonymous or local class.
+                EnclosingMethodAttribute ema
+                    = (EnclosingMethodAttribute)cf.getAttribute(
+                                                EnclosingMethodAttribute.tag);
+                if (ema != null)
+                    return classPool.get(ema.className());
+
             }
 
         return null;
     }
 
-    public org.hotswap.agent.javassist.CtMethod getEnclosingMethod() throws org.hotswap.agent.javassist.NotFoundException {
+    public boolean isInnerClass() throws NotFoundException {
         ClassFile cf = getClassFile2();
-        org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute ema
-                = (org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute) cf.getAttribute(
-                org.hotswap.agent.javassist.bytecode.EnclosingMethodAttribute.tag);
-        if (ema != null) {
-            org.hotswap.agent.javassist.CtClass enc = classPool.get(ema.className());
-            return enc.getMethod(ema.methodName(), ema.methodDescriptor());
-        }
+        InnerClassesAttribute ica = (InnerClassesAttribute)cf.getAttribute(
+                                                InnerClassesAttribute.tag);
+        if (ica == null)
+            return false;
 
-        return null;
+        String name = getName();
+        int n = ica.tableLength();
+        for (int i = 0; i < n; ++i)
+            if (name.equals(ica.innerClass(i))) {
+                String outName = ica.outerClass(i);
+                if (outName != null)
+                    return true;
+                else {
+                    // maybe anonymous or local class.
+                    EnclosingMethodAttribute ema
+                        = (EnclosingMethodAttribute)cf.getAttribute(
+                                                    EnclosingMethodAttribute.tag);
+                    if (ema != null)
+                        return true;
+                }
+            }
+
+        return false;
     }
 
-    public org.hotswap.agent.javassist.CtClass makeNestedClass(String name, boolean isStatic) {
+    @Override
+    public CtBehavior getEnclosingBehavior() throws NotFoundException
+    {
+        ClassFile cf = getClassFile2();
+        EnclosingMethodAttribute ema
+                = (EnclosingMethodAttribute)cf.getAttribute(
+                                                EnclosingMethodAttribute.tag);
+        if (ema == null)
+            return null;
+        CtClass enc = classPool.get(ema.className());
+        String name = ema.methodName();
+        if (MethodInfo.nameInit.equals(name))
+            return enc.getConstructor(ema.methodDescriptor());
+        else if(MethodInfo.nameClinit.equals(name))
+            return enc.getClassInitializer();
+        else
+            return enc.getMethod(name, ema.methodDescriptor());
+    }
+
+    @Override
+    public CtClass makeNestedClass(String name, boolean isStatic)
+    {
         if (!isStatic)
             throw new RuntimeException(
-                    "sorry, only nested static class is supported");
+                        "sorry, only nested static class is supported");
 
         checkModify();
-        org.hotswap.agent.javassist.CtClass c = classPool.makeNestedClass(getName() + "$" + name);
+        CtClass c = classPool.makeNestedClass(getName() + "$" + name);
         ClassFile cf = getClassFile2();
         ClassFile cf2 = c.getClassFile2();
-        InnerClassesAttribute ica = (InnerClassesAttribute) cf.getAttribute(
-                InnerClassesAttribute.tag);
+        InnerClassesAttribute ica = (InnerClassesAttribute)cf.getAttribute(
+                                                InnerClassesAttribute.tag);
         if (ica == null) {
             ica = new InnerClassesAttribute(cf.getConstPool());
             cf.addAttribute(ica);
         }
 
         ica.append(c.getName(), this.getName(), name,
-                (cf2.getAccessFlags() & ~AccessFlag.SUPER) | AccessFlag.STATIC);
+                   (cf2.getAccessFlags() & ~AccessFlag.SUPER) | AccessFlag.STATIC);
         cf2.addAttribute(ica.copy(cf2.getConstPool(), null));
         return c;
     }
@@ -773,10 +965,10 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
     /* flush cached names.
      */
     private void nameReplaced() {
-        org.hotswap.agent.javassist.CtMember.Cache cache = hasMemberCache();
+        CtMember.Cache cache = hasMemberCache();
         if (cache != null) {
-            org.hotswap.agent.javassist.CtMember mth = cache.methodHead();
-            org.hotswap.agent.javassist.CtMember tail = cache.lastMethod();
+            CtMember mth = cache.methodHead();
+            CtMember tail = cache.lastMethod();
             while (mth != tail) {
                 mth = mth.next();
                 mth.nameReplaced();
@@ -787,196 +979,191 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
     /**
      * Returns null if members are not cached.
      */
-    protected org.hotswap.agent.javassist.CtMember.Cache hasMemberCache() {
+    protected CtMember.Cache hasMemberCache() {
         if (memberCache != null)
-            return (org.hotswap.agent.javassist.CtMember.Cache) memberCache.get();
-        else
-            return null;
+            return memberCache.get();
+        return null;
     }
 
-    protected synchronized org.hotswap.agent.javassist.CtMember.Cache getMembers() {
-        org.hotswap.agent.javassist.CtMember.Cache cache = null;
+    protected synchronized CtMember.Cache getMembers() {
+        CtMember.Cache cache = null;
         if (memberCache == null
-                || (cache = (org.hotswap.agent.javassist.CtMember.Cache) memberCache.get()) == null) {
-            cache = new org.hotswap.agent.javassist.CtMember.Cache(this);
+            || (cache = memberCache.get()) == null) {
+            cache = new CtMember.Cache(this);
             makeFieldCache(cache);
             makeBehaviorCache(cache);
-            memberCache = new WeakReference(cache);
+            memberCache = new WeakReference<CtMember.Cache>(cache);
         }
 
         return cache;
     }
 
-    private void makeFieldCache(org.hotswap.agent.javassist.CtMember.Cache cache) {
-        List list = getClassFile2().getFields();
-        int n = list.size();
-        for (int i = 0; i < n; ++i) {
-            FieldInfo finfo = (FieldInfo) list.get(i);
-            org.hotswap.agent.javassist.CtField newField = new org.hotswap.agent.javassist.CtField(finfo, this);
-            cache.addField(newField);
-        }
+    private void makeFieldCache(CtMember.Cache cache) {
+        List<FieldInfo> fields = getClassFile3(false).getFields();
+        for (FieldInfo finfo:fields)
+            cache.addField(new CtField(finfo, this));
     }
 
-    private void makeBehaviorCache(org.hotswap.agent.javassist.CtMember.Cache cache) {
-        List list = getClassFile2().getMethods();
-        int n = list.size();
-        for (int i = 0; i < n; ++i) {
-            MethodInfo minfo = (MethodInfo) list.get(i);
-            if (minfo.isMethod()) {
-                org.hotswap.agent.javassist.CtMethod newMethod = new org.hotswap.agent.javassist.CtMethod(minfo, this);
-                cache.addMethod(newMethod);
-            } else {
-                CtConstructor newCons = new CtConstructor(minfo, this);
-                cache.addConstructor(newCons);
-            }
-        }
+    private void makeBehaviorCache(CtMember.Cache cache) {
+        List<MethodInfo> methods = getClassFile3(false).getMethods();
+        for (MethodInfo minfo:methods)
+            if (minfo.isMethod())
+                cache.addMethod(new CtMethod(minfo, this));
+            else
+                cache.addConstructor(new CtConstructor(minfo, this));
     }
 
-    public org.hotswap.agent.javassist.CtField[] getFields() {
-        ArrayList alist = new ArrayList();
+    @Override
+    public CtField[] getFields() {
+        List<CtMember> alist = new ArrayList<CtMember>();
         getFields(alist, this);
-        return (org.hotswap.agent.javassist.CtField[]) alist.toArray(new org.hotswap.agent.javassist.CtField[alist.size()]);
+        return alist.toArray(new CtField[alist.size()]);
     }
 
-    private static void getFields(ArrayList alist, org.hotswap.agent.javassist.CtClass cc) {
-        int i, num;
+    private static void getFields(List<CtMember> alist, CtClass cc) {
         if (cc == null)
             return;
 
         try {
             getFields(alist, cc.getSuperclass());
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
         }
+        catch (NotFoundException e) {}
 
         try {
-            org.hotswap.agent.javassist.CtClass[] ifs = cc.getInterfaces();
-            num = ifs.length;
-            for (i = 0; i < num; ++i)
-                getFields(alist, ifs[i]);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+            CtClass[] ifs = cc.getInterfaces();
+            for (CtClass ctc : ifs)
+                getFields(alist, ctc);
         }
+        catch (NotFoundException e) {}
 
-        org.hotswap.agent.javassist.CtMember.Cache memCache = ((CtClassType) cc).getMembers();
-        org.hotswap.agent.javassist.CtMember field = memCache.fieldHead();
-        org.hotswap.agent.javassist.CtMember tail = memCache.lastField();
+        CtMember.Cache memCache = ((CtClassType)cc).getMembers();
+        CtMember field = memCache.fieldHead();
+        CtMember tail = memCache.lastField();
         while (field != tail) {
             field = field.next();
-            if (!org.hotswap.agent.javassist.Modifier.isPrivate(field.getModifiers()))
+            if (!Modifier.isPrivate(field.getModifiers()))
                 alist.add(field);
         }
     }
 
-    public org.hotswap.agent.javassist.CtField getField(String name, String desc) throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtField f = getField2(name, desc);
+    @Override
+    public CtField getField(String name, String desc) throws NotFoundException {
+        CtField f = getField2(name, desc);
         return checkGetField(f, name, desc);
     }
 
-    private org.hotswap.agent.javassist.CtField checkGetField(org.hotswap.agent.javassist.CtField f, String name, String desc)
-            throws org.hotswap.agent.javassist.NotFoundException {
+    private CtField checkGetField(CtField f, String name, String desc)
+        throws NotFoundException
+    {
         if (f == null) {
             String msg = "field: " + name;
             if (desc != null)
                 msg += " type " + desc;
 
-            throw new org.hotswap.agent.javassist.NotFoundException(msg + " in " + getName());
-        } else
-            return f;
+            throw new NotFoundException(msg + " in " + getName());
+        }
+        return f;
     }
 
-    org.hotswap.agent.javassist.CtField getField2(String name, String desc) {
-        org.hotswap.agent.javassist.CtField df = getDeclaredField2(name, desc);
+    @Override
+    CtField getField2(String name, String desc) {
+        CtField df = getDeclaredField2(name, desc);
         if (df != null)
             return df;
 
         try {
-            org.hotswap.agent.javassist.CtClass[] ifs = getInterfaces();
-            int num = ifs.length;
-            for (int i = 0; i < num; ++i) {
-                org.hotswap.agent.javassist.CtField f = ifs[i].getField2(name, desc);
+            CtClass[] ifs = getInterfaces();
+            for (CtClass ctc : ifs) {
+                CtField f = ctc.getField2(name, desc);
                 if (f != null)
                     return f;
             }
 
-            org.hotswap.agent.javassist.CtClass s = getSuperclass();
+            CtClass s = getSuperclass();
             if (s != null)
                 return s.getField2(name, desc);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
         }
+        catch (NotFoundException e) {}
         return null;
     }
 
-    public org.hotswap.agent.javassist.CtField[] getDeclaredFields() {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember field = memCache.fieldHead();
-        org.hotswap.agent.javassist.CtMember tail = memCache.lastField();
-        int num = org.hotswap.agent.javassist.CtMember.Cache.count(field, tail);
-        org.hotswap.agent.javassist.CtField[] cfs = new org.hotswap.agent.javassist.CtField[num];
+    @Override
+    public CtField[] getDeclaredFields() {
+        CtMember.Cache memCache = getMembers();
+        CtMember field = memCache.fieldHead();
+        CtMember tail = memCache.lastField();
+        int num = CtMember.Cache.count(field, tail);
+        CtField[] cfs = new CtField[num];
         int i = 0;
         while (field != tail) {
             field = field.next();
-            cfs[i++] = (org.hotswap.agent.javassist.CtField) field;
+            cfs[i++] = (CtField)field;
         }
 
         return cfs;
     }
 
-    public org.hotswap.agent.javassist.CtField getDeclaredField(String name) throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public CtField getDeclaredField(String name) throws NotFoundException {
         return getDeclaredField(name, null);
     }
 
-    public org.hotswap.agent.javassist.CtField getDeclaredField(String name, String desc) throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtField f = getDeclaredField2(name, desc);
+    @Override
+    public CtField getDeclaredField(String name, String desc) throws NotFoundException {
+        CtField f = getDeclaredField2(name, desc);
         return checkGetField(f, name, desc);
     }
 
-    private org.hotswap.agent.javassist.CtField getDeclaredField2(String name, String desc) {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember field = memCache.fieldHead();
-        org.hotswap.agent.javassist.CtMember tail = memCache.lastField();
+    private CtField getDeclaredField2(String name, String desc) {
+        CtMember.Cache memCache = getMembers();
+        CtMember field = memCache.fieldHead();
+        CtMember tail = memCache.lastField();
         while (field != tail) {
             field = field.next();
             if (field.getName().equals(name)
-                    && (desc == null || desc.equals(field.getSignature())))
-                return (org.hotswap.agent.javassist.CtField) field;
+                && (desc == null || desc.equals(field.getSignature())))
+                return (CtField)field;
         }
 
         return null;
     }
 
-    public org.hotswap.agent.javassist.CtBehavior[] getDeclaredBehaviors() {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember cons = memCache.consHead();
-        org.hotswap.agent.javassist.CtMember consTail = memCache.lastCons();
-        int cnum = org.hotswap.agent.javassist.CtMember.Cache.count(cons, consTail);
-        org.hotswap.agent.javassist.CtMember mth = memCache.methodHead();
-        org.hotswap.agent.javassist.CtMember mthTail = memCache.lastMethod();
-        int mnum = org.hotswap.agent.javassist.CtMember.Cache.count(mth, mthTail);
+    @Override
+    public CtBehavior[] getDeclaredBehaviors() {
+        CtMember.Cache memCache = getMembers();
+        CtMember cons = memCache.consHead();
+        CtMember consTail = memCache.lastCons();
+        int cnum = CtMember.Cache.count(cons, consTail);
+        CtMember mth = memCache.methodHead();
+        CtMember mthTail = memCache.lastMethod();
+        int mnum = CtMember.Cache.count(mth, mthTail);
 
-        org.hotswap.agent.javassist.CtBehavior[] cb = new org.hotswap.agent.javassist.CtBehavior[cnum + mnum];
+        CtBehavior[] cb = new CtBehavior[cnum + mnum];
         int i = 0;
         while (cons != consTail) {
             cons = cons.next();
-            cb[i++] = (org.hotswap.agent.javassist.CtBehavior) cons;
+            cb[i++] = (CtBehavior)cons;
         }
 
         while (mth != mthTail) {
             mth = mth.next();
-            cb[i++] = (org.hotswap.agent.javassist.CtBehavior) mth;
+            cb[i++] = (CtBehavior)mth;
         }
 
         return cb;
     }
 
+    @Override
     public CtConstructor[] getConstructors() {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember cons = memCache.consHead();
-        org.hotswap.agent.javassist.CtMember consTail = memCache.lastCons();
+        CtMember.Cache memCache = getMembers();
+        CtMember cons = memCache.consHead();
+        CtMember consTail = memCache.lastCons();
 
         int n = 0;
-        org.hotswap.agent.javassist.CtMember mem = cons;
+        CtMember mem = cons;
         while (mem != consTail) {
             mem = mem.next();
-            if (isPubCons((CtConstructor) mem))
+            if (isPubCons((CtConstructor)mem))
                 n++;
         }
 
@@ -985,7 +1172,7 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         mem = cons;
         while (mem != consTail) {
             mem = mem.next();
-            CtConstructor cc = (CtConstructor) mem;
+            CtConstructor cc = (CtConstructor)mem;
             if (isPubCons(cc))
                 result[i++] = cc;
         }
@@ -994,37 +1181,40 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
     }
 
     private static boolean isPubCons(CtConstructor cons) {
-        return !org.hotswap.agent.javassist.Modifier.isPrivate(cons.getModifiers())
+        return !Modifier.isPrivate(cons.getModifiers())
                 && cons.isConstructor();
     }
 
+    @Override
     public CtConstructor getConstructor(String desc)
-            throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember cons = memCache.consHead();
-        org.hotswap.agent.javassist.CtMember consTail = memCache.lastCons();
+        throws NotFoundException
+    {
+        CtMember.Cache memCache = getMembers();
+        CtMember cons = memCache.consHead();
+        CtMember consTail = memCache.lastCons();
 
         while (cons != consTail) {
             cons = cons.next();
-            CtConstructor cc = (CtConstructor) cons;
+            CtConstructor cc = (CtConstructor)cons;
             if (cc.getMethodInfo2().getDescriptor().equals(desc)
-                    && cc.isConstructor())
+                && cc.isConstructor())
                 return cc;
         }
 
         return super.getConstructor(desc);
     }
 
+    @Override
     public CtConstructor[] getDeclaredConstructors() {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember cons = memCache.consHead();
-        org.hotswap.agent.javassist.CtMember consTail = memCache.lastCons();
+        CtMember.Cache memCache = getMembers();
+        CtMember cons = memCache.consHead();
+        CtMember consTail = memCache.lastCons();
 
         int n = 0;
-        org.hotswap.agent.javassist.CtMember mem = cons;
+        CtMember mem = cons;
         while (mem != consTail) {
             mem = mem.next();
-            CtConstructor cc = (CtConstructor) mem;
+            CtConstructor cc = (CtConstructor)mem;
             if (cc.isConstructor())
                 n++;
         }
@@ -1034,7 +1224,7 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         mem = cons;
         while (mem != consTail) {
             mem = mem.next();
-            CtConstructor cc = (CtConstructor) mem;
+            CtConstructor cc = (CtConstructor)mem;
             if (cc.isConstructor())
                 result[i++] = cc;
         }
@@ -1042,14 +1232,15 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         return result;
     }
 
+    @Override
     public CtConstructor getClassInitializer() {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember cons = memCache.consHead();
-        org.hotswap.agent.javassist.CtMember consTail = memCache.lastCons();
+        CtMember.Cache memCache = getMembers();
+        CtMember cons = memCache.consHead();
+        CtMember consTail = memCache.lastCons();
 
         while (cons != consTail) {
             cons = cons.next();
-            CtConstructor cc = (CtConstructor) cons;
+            CtConstructor cc = (CtConstructor)cons;
             if (cc.isClassInitializer())
                 return cc;
         }
@@ -1057,146 +1248,167 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         return null;
     }
 
-    public org.hotswap.agent.javassist.CtMethod[] getMethods() {
-        HashMap h = new HashMap();
+    @Override
+    public CtMethod[] getMethods() {
+        Map<String,CtMember> h = new HashMap<String,CtMember>();
         getMethods0(h, this);
-        return (org.hotswap.agent.javassist.CtMethod[]) h.values().toArray(new org.hotswap.agent.javassist.CtMethod[h.size()]);
+        return h.values().toArray(new CtMethod[h.size()]);
     }
 
-    private static void getMethods0(HashMap h, org.hotswap.agent.javassist.CtClass cc) {
+    private static void getMethods0(Map<String,CtMember> h, CtClass cc) {
         try {
-            org.hotswap.agent.javassist.CtClass[] ifs = cc.getInterfaces();
-            int size = ifs.length;
-            for (int i = 0; i < size; ++i)
-                getMethods0(h, ifs[i]);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+            CtClass[] ifs = cc.getInterfaces();
+            for (CtClass ctc : ifs)
+                getMethods0(h, ctc);
         }
+        catch (NotFoundException e) {}
 
         try {
-            org.hotswap.agent.javassist.CtClass s = cc.getSuperclass();
+            CtClass s = cc.getSuperclass();
             if (s != null)
                 getMethods0(h, s);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
         }
+        catch (NotFoundException e) {}
 
         if (cc instanceof CtClassType) {
-            org.hotswap.agent.javassist.CtMember.Cache memCache = ((CtClassType) cc).getMembers();
-            org.hotswap.agent.javassist.CtMember mth = memCache.methodHead();
-            org.hotswap.agent.javassist.CtMember mthTail = memCache.lastMethod();
+            CtMember.Cache memCache = ((CtClassType)cc).getMembers();
+            CtMember mth = memCache.methodHead();
+            CtMember mthTail = memCache.lastMethod();
 
             while (mth != mthTail) {
                 mth = mth.next();
-                if (!org.hotswap.agent.javassist.Modifier.isPrivate(mth.getModifiers()))
-                    h.put(((org.hotswap.agent.javassist.CtMethod) mth).getStringRep(), mth);
+                if (!Modifier.isPrivate(mth.getModifiers()))
+                    h.put(((CtMethod)mth).getStringRep(), mth);
             }
         }
     }
 
-    public org.hotswap.agent.javassist.CtMethod getMethod(String name, String desc)
-            throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtMethod m = getMethod0(this, name, desc);
+    @Override
+    public CtMethod getMethod(String name, String desc)
+        throws NotFoundException
+    {
+        CtMethod m = getMethod0(this, name, desc);
         if (m != null)
             return m;
-        else
-            throw new org.hotswap.agent.javassist.NotFoundException(name + "(..) is not found in "
-                    + getName());
+        throw new NotFoundException(name + "(..) is not found in "
+                                    + getName());
     }
 
-    private static org.hotswap.agent.javassist.CtMethod getMethod0(org.hotswap.agent.javassist.CtClass cc,
-                                                                   String name, String desc) {
+    private static CtMethod getMethod0(CtClass cc,
+                                       String name, String desc) {
         if (cc instanceof CtClassType) {
-            org.hotswap.agent.javassist.CtMember.Cache memCache = ((CtClassType) cc).getMembers();
-            org.hotswap.agent.javassist.CtMember mth = memCache.methodHead();
-            org.hotswap.agent.javassist.CtMember mthTail = memCache.lastMethod();
+            CtMember.Cache memCache = ((CtClassType)cc).getMembers();
+            CtMember mth = memCache.methodHead();
+            CtMember mthTail = memCache.lastMethod();
 
             while (mth != mthTail) {
                 mth = mth.next();
                 if (mth.getName().equals(name)
-                        && ((org.hotswap.agent.javassist.CtMethod) mth).getMethodInfo2().getDescriptor().equals(desc))
-                    return (org.hotswap.agent.javassist.CtMethod) mth;
+                        && ((CtMethod)mth).getMethodInfo2().getDescriptor().equals(desc))
+                    return (CtMethod)mth;
             }
         }
 
         try {
-            org.hotswap.agent.javassist.CtClass s = cc.getSuperclass();
+            CtClass s = cc.getSuperclass();
             if (s != null) {
-                org.hotswap.agent.javassist.CtMethod m = getMethod0(s, name, desc);
+                CtMethod m = getMethod0(s, name, desc);
                 if (m != null)
                     return m;
             }
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
         }
+        catch (NotFoundException e) {}
 
         try {
-            org.hotswap.agent.javassist.CtClass[] ifs = cc.getInterfaces();
-            int size = ifs.length;
-            for (int i = 0; i < size; ++i) {
-                org.hotswap.agent.javassist.CtMethod m = getMethod0(ifs[i], name, desc);
+            CtClass[] ifs = cc.getInterfaces();
+            for (CtClass ctc : ifs) {
+                CtMethod m = getMethod0(ctc, name, desc);
                 if (m != null)
                     return m;
             }
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
         }
+        catch (NotFoundException e) {}
         return null;
     }
 
-    public org.hotswap.agent.javassist.CtMethod[] getDeclaredMethods() {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember mth = memCache.methodHead();
-        org.hotswap.agent.javassist.CtMember mthTail = memCache.lastMethod();
-        int num = org.hotswap.agent.javassist.CtMember.Cache.count(mth, mthTail);
-        org.hotswap.agent.javassist.CtMethod[] cms = new org.hotswap.agent.javassist.CtMethod[num];
-        int i = 0;
+    @Override
+    public CtMethod[] getDeclaredMethods() {
+        CtMember.Cache memCache = getMembers();
+        CtMember mth = memCache.methodHead();
+        CtMember mthTail = memCache.lastMethod();
+        List<CtMember> methods = new ArrayList<CtMember>();
         while (mth != mthTail) {
             mth = mth.next();
-            cms[i++] = (org.hotswap.agent.javassist.CtMethod) mth;
+            methods.add(mth);
         }
 
-        return cms;
+        return methods.toArray(new CtMethod[methods.size()]);
     }
 
-    public org.hotswap.agent.javassist.CtMethod getDeclaredMethod(String name) throws org.hotswap.agent.javassist.NotFoundException {
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember mth = memCache.methodHead();
-        org.hotswap.agent.javassist.CtMember mthTail = memCache.lastMethod();
+    @Override
+    public CtMethod[] getDeclaredMethods(String name) throws NotFoundException {
+        CtMember.Cache memCache = getMembers();
+        CtMember mth = memCache.methodHead();
+        CtMember mthTail = memCache.lastMethod();
+        List<CtMember> methods = new ArrayList<CtMember>();
         while (mth != mthTail) {
             mth = mth.next();
             if (mth.getName().equals(name))
-                return (org.hotswap.agent.javassist.CtMethod) mth;
+                methods.add(mth);
         }
 
-        throw new org.hotswap.agent.javassist.NotFoundException(name + "(..) is not found in "
-                + getName());
+        return methods.toArray(new CtMethod[methods.size()]);
     }
 
-    public org.hotswap.agent.javassist.CtMethod getDeclaredMethod(String name, org.hotswap.agent.javassist.CtClass[] params)
-            throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public CtMethod getDeclaredMethod(String name) throws NotFoundException {
+        CtMember.Cache memCache = getMembers();
+        CtMember mth = memCache.methodHead();
+        CtMember mthTail = memCache.lastMethod();
+        while (mth != mthTail) {
+            mth = mth.next();
+            if (mth.getName().equals(name))
+                return (CtMethod)mth;
+        }
+
+        throw new NotFoundException(name + "(..) is not found in "
+                                    + getName());
+    }
+
+    @Override
+    public CtMethod getDeclaredMethod(String name, CtClass[] params)
+        throws NotFoundException
+    {
         String desc = Descriptor.ofParameters(params);
-        org.hotswap.agent.javassist.CtMember.Cache memCache = getMembers();
-        org.hotswap.agent.javassist.CtMember mth = memCache.methodHead();
-        org.hotswap.agent.javassist.CtMember mthTail = memCache.lastMethod();
+        CtMember.Cache memCache = getMembers();
+        CtMember mth = memCache.methodHead();
+        CtMember mthTail = memCache.lastMethod();
 
         while (mth != mthTail) {
             mth = mth.next();
             if (mth.getName().equals(name)
-                    && ((org.hotswap.agent.javassist.CtMethod) mth).getMethodInfo2().getDescriptor().startsWith(desc))
-                return (org.hotswap.agent.javassist.CtMethod) mth;
+                    && ((CtMethod)mth).getMethodInfo2().getDescriptor().startsWith(desc))
+                return (CtMethod)mth;
         }
 
-        throw new org.hotswap.agent.javassist.NotFoundException(name + "(..) is not found in "
-                + getName());
+        throw new NotFoundException(name + "(..) is not found in "
+                                    + getName());
     }
 
-    public void addField(org.hotswap.agent.javassist.CtField f, String init)
-            throws org.hotswap.agent.javassist.CannotCompileException {
-        addField(f, org.hotswap.agent.javassist.CtField.Initializer.byExpr(init));
+    @Override
+    public void addField(CtField f, String init)
+        throws CannotCompileException
+    {
+        addField(f, CtField.Initializer.byExpr(init));
     }
 
-    public void addField(org.hotswap.agent.javassist.CtField f, org.hotswap.agent.javassist.CtField.Initializer init)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+    @Override
+    public void addField(CtField f, CtField.Initializer init)
+        throws CannotCompileException
+    {
         checkModify();
         if (f.getDeclaringClass() != this)
-            throw new org.hotswap.agent.javassist.CannotCompileException("cannot add");
+            throw new CannotCompileException("cannot add");
 
         if (init == null)
             init = f.getInit();
@@ -1204,7 +1416,7 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         if (init != null) {
             init.check(f.getSignature());
             int mod = f.getModifiers();
-            if (org.hotswap.agent.javassist.Modifier.isStatic(mod) && org.hotswap.agent.javassist.Modifier.isFinal(mod))
+            if (Modifier.isStatic(mod) && Modifier.isFinal(mod))
                 try {
                     ConstPool cp = getClassFile2().getConstPool();
                     int index = init.getConstantValue(cp, f.getType());
@@ -1212,8 +1424,8 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                         f.getFieldInfo2().addAttribute(new ConstantAttribute(cp, index));
                         init = null;
                     }
-                } catch (org.hotswap.agent.javassist.NotFoundException e) {
                 }
+                catch (NotFoundException e) {}
         }
 
         getMembers().addField(f);
@@ -1233,19 +1445,23 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         }
     }
 
-    public void removeField(org.hotswap.agent.javassist.CtField f) throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public void removeField(CtField f) throws NotFoundException {
         checkModify();
         FieldInfo fi = f.getFieldInfo2();
         ClassFile cf = getClassFile2();
         if (cf.getFields().remove(fi)) {
             getMembers().remove(f);
             gcConstPool = true;
-        } else
-            throw new org.hotswap.agent.javassist.NotFoundException(f.toString());
+        }
+        else
+            throw new NotFoundException(f.toString());
     }
 
+    @Override
     public CtConstructor makeClassInitializer()
-            throws org.hotswap.agent.javassist.CannotCompileException {
+        throws CannotCompileException
+    {
         CtConstructor clinit = getClassInitializer();
         if (clinit != null)
             return clinit;
@@ -1257,101 +1473,113 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         return getClassInitializer();
     }
 
+    @Override
     public void addConstructor(CtConstructor c)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+        throws CannotCompileException
+    {
         checkModify();
         if (c.getDeclaringClass() != this)
-            throw new org.hotswap.agent.javassist.CannotCompileException("cannot add");
+            throw new CannotCompileException("cannot add");
 
         getMembers().addConstructor(c);
         getClassFile2().addMethod(c.getMethodInfo2());
     }
 
-    public void removeConstructor(CtConstructor m) throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public void removeConstructor(CtConstructor m) throws NotFoundException {
         checkModify();
         MethodInfo mi = m.getMethodInfo2();
         ClassFile cf = getClassFile2();
         if (cf.getMethods().remove(mi)) {
             getMembers().remove(m);
             gcConstPool = true;
-        } else
-            throw new org.hotswap.agent.javassist.NotFoundException(m.toString());
+        }
+        else
+            throw new NotFoundException(m.toString());
     }
 
-    public void addMethod(org.hotswap.agent.javassist.CtMethod m) throws org.hotswap.agent.javassist.CannotCompileException {
+    @Override
+    public void addMethod(CtMethod m) throws CannotCompileException {
         checkModify();
         if (m.getDeclaringClass() != this)
-            throw new org.hotswap.agent.javassist.CannotCompileException("bad declaring class");
+            throw new CannotCompileException("bad declaring class");
 
         int mod = m.getModifiers();
-        if ((getModifiers() & org.hotswap.agent.javassist.Modifier.INTERFACE) != 0) {
-            m.setModifiers(mod | org.hotswap.agent.javassist.Modifier.PUBLIC);
-            if ((mod & org.hotswap.agent.javassist.Modifier.ABSTRACT) == 0)
-                throw new org.hotswap.agent.javassist.CannotCompileException(
-                        "an interface method must be abstract: " + m.toString());
+        if ((getModifiers() & Modifier.INTERFACE) != 0) {
+            if (Modifier.isProtected(mod) || Modifier.isPrivate(mod))
+                throw new CannotCompileException(
+                        "an interface method must be public: " + m.toString());
+
+            m.setModifiers(mod | Modifier.PUBLIC);
         }
 
         getMembers().addMethod(m);
         getClassFile2().addMethod(m.getMethodInfo2());
-        if ((mod & org.hotswap.agent.javassist.Modifier.ABSTRACT) != 0)
-            setModifiers(getModifiers() | org.hotswap.agent.javassist.Modifier.ABSTRACT);
+        if ((mod & Modifier.ABSTRACT) != 0)
+            setModifiers(getModifiers() | Modifier.ABSTRACT);
     }
 
-    public void removeMethod(org.hotswap.agent.javassist.CtMethod m) throws org.hotswap.agent.javassist.NotFoundException {
+    @Override
+    public void removeMethod(CtMethod m) throws NotFoundException
+    {
         checkModify();
         MethodInfo mi = m.getMethodInfo2();
         ClassFile cf = getClassFile2();
         if (cf.getMethods().remove(mi)) {
             getMembers().remove(m);
             gcConstPool = true;
-        } else
-            throw new org.hotswap.agent.javassist.NotFoundException(m.toString());
+        }
+        else
+            throw new NotFoundException(m.toString());
     }
 
-    public byte[] getAttribute(String name) {
-        org.hotswap.agent.javassist.bytecode.AttributeInfo ai = getClassFile2().getAttribute(name);
+    @Override
+    public byte[] getAttribute(String name)
+    {
+        AttributeInfo ai = getClassFile2().getAttribute(name);
         if (ai == null)
             return null;
-        else
-            return ai.get();
+        return ai.get();
     }
 
-    public void setAttribute(String name, byte[] data) {
+    @Override
+    public void setAttribute(String name, byte[] data)
+    {
         checkModify();
         ClassFile cf = getClassFile2();
-        cf.addAttribute(new org.hotswap.agent.javassist.bytecode.AttributeInfo(cf.getConstPool(), name, data));
+        cf.addAttribute(new AttributeInfo(cf.getConstPool(), name, data));
     }
 
-    public void instrument(org.hotswap.agent.javassist.CodeConverter converter)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+    @Override
+    public void instrument(CodeConverter converter)
+        throws CannotCompileException
+    {
         checkModify();
         ClassFile cf = getClassFile2();
         ConstPool cp = cf.getConstPool();
-        List list = cf.getMethods();
-        int n = list.size();
-        for (int i = 0; i < n; ++i) {
-            MethodInfo minfo = (MethodInfo) list.get(i);
+        List<MethodInfo> methods = cf.getMethods();
+        for (MethodInfo minfo: methods.toArray(new MethodInfo[methods.size()]))
             converter.doit(this, minfo, cp);
-        }
     }
 
+    @Override
     public void instrument(ExprEditor editor)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+        throws CannotCompileException
+    {
         checkModify();
         ClassFile cf = getClassFile2();
-        List list = cf.getMethods();
-        int n = list.size();
-        for (int i = 0; i < n; ++i) {
-            MethodInfo minfo = (MethodInfo) list.get(i);
+        List<MethodInfo> methods = cf.getMethods();
+        for (MethodInfo minfo: methods.toArray(new MethodInfo[methods.size()]))
             editor.doit(this, minfo);
-        }
     }
 
     /**
-     * @see org.hotswap.agent.javassist.CtClass#prune()
-     * @see org.hotswap.agent.javassist.CtClass#stopPruning(boolean)
+     * @see javassist.CtClass#prune()
+     * @see javassist.CtClass#stopPruning(boolean)
      */
-    public void prune() {
+    @Override
+    public void prune()
+    {
         if (wasPruned)
             return;
 
@@ -1359,12 +1587,13 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         getClassFile2().prune();
     }
 
-    public void rebuildClassFile() {
-        gcConstPool = true;
-    }
+    @Override
+    public void rebuildClassFile() { gcConstPool = true; }
 
+    @Override
     public void toBytecode(DataOutputStream out)
-            throws org.hotswap.agent.javassist.CannotCompileException, IOException {
+        throws CannotCompileException, IOException
+    {
         try {
             if (isModified()) {
                 checkPruned("toBytecode");
@@ -1387,7 +1616,8 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                     cf.prune();
                     wasPruned = true;
                 }
-            } else {
+            }
+            else {
                 classPool.writeClassfile(getName(), out);
                 // to save memory
                 // classfile = null;
@@ -1395,38 +1625,46 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
 
             getCount = 0;
             wasFrozen = true;
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
-        } catch (IOException e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
+        }
+        catch (NotFoundException e) {
+            throw new CannotCompileException(e);
+        }
+        catch (IOException e) {
+            throw new CannotCompileException(e);
         }
     }
 
-    private void dumpClassFile(ClassFile cf) throws IOException {
+    private void dumpClassFile(ClassFile cf) throws IOException
+    {
         DataOutputStream dump = makeFileOutput(debugDump);
         try {
             cf.write(dump);
-        } finally {
+        }
+        finally {
             dump.close();
         }
     }
 
     /* See also checkModified()
      */
-    private void checkPruned(String method) {
+    private void checkPruned(String method)
+    {
         if (wasPruned)
             throw new RuntimeException(method + "(): " + getName()
-                    + " was pruned.");
+                                       + " was pruned.");
     }
 
-    public boolean stopPruning(boolean stop) {
+    @Override
+    public boolean stopPruning(boolean stop)
+    {
         boolean prev = !doPruning;
         doPruning = !stop;
         return prev;
     }
 
     private void modifyClassConstructor(ClassFile cf)
-            throws org.hotswap.agent.javassist.CannotCompileException, org.hotswap.agent.javassist.NotFoundException {
+        throws CannotCompileException, NotFoundException
+    {
         if (fieldInitializers == null)
             return;
 
@@ -1435,11 +1673,11 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         int stacksize = 0;
         boolean doInit = false;
         for (FieldInitLink fi = fieldInitializers; fi != null; fi = fi.next) {
-            org.hotswap.agent.javassist.CtField f = fi.field;
-            if (org.hotswap.agent.javassist.Modifier.isStatic(f.getModifiers())) {
+            CtField f = fi.field;
+            if (Modifier.isStatic(f.getModifiers())) {
                 doInit = true;
                 int s = fi.init.compileIfStatic(f.getType(), f.getName(),
-                        code, jv);
+                                                code, jv);
                 if (stacksize < s)
                     stacksize = s;
             }
@@ -1451,7 +1689,8 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
 
     private void modifyClassConstructor(ClassFile cf, Bytecode code,
                                         int stacksize, int localsize)
-            throws org.hotswap.agent.javassist.CannotCompileException {
+        throws CannotCompileException
+    {
         MethodInfo m = cf.getStaticInitializer();
         if (m == null) {
             code.add(Bytecode.RETURN);
@@ -1461,13 +1700,14 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             m.setAccessFlags(AccessFlag.STATIC);
             m.setCodeAttribute(code.toCodeAttribute());
             cf.addMethod(m);
-            org.hotswap.agent.javassist.CtMember.Cache cache = hasMemberCache();
+            CtMember.Cache cache = hasMemberCache();
             if (cache != null)
                 cache.addConstructor(new CtConstructor(m, this));
-        } else {
-            org.hotswap.agent.javassist.bytecode.CodeAttribute codeAttr = m.getCodeAttribute();
+        }
+        else {
+            CodeAttribute codeAttr = m.getCodeAttribute();
             if (codeAttr == null)
-                throw new org.hotswap.agent.javassist.CannotCompileException("empty <clinit>");
+                throw new CannotCompileException("empty <clinit>");
 
             try {
                 CodeIterator it = codeAttr.iterator();
@@ -1480,52 +1720,55 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
                 int maxlocals = codeAttr.getMaxLocals();
                 if (maxlocals < localsize)
                     codeAttr.setMaxLocals(localsize);
-            } catch (BadBytecode e) {
-                throw new org.hotswap.agent.javassist.CannotCompileException(e);
+            }
+            catch (BadBytecode e) {
+                throw new CannotCompileException(e);
             }
         }
 
         try {
             m.rebuildStackMapIf6(classPool, cf);
-        } catch (BadBytecode e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
+        }
+        catch (BadBytecode e) {
+            throw new CannotCompileException(e);
         }
     }
 
     private void modifyConstructors(ClassFile cf)
-            throws org.hotswap.agent.javassist.CannotCompileException, org.hotswap.agent.javassist.NotFoundException {
+        throws CannotCompileException, NotFoundException
+    {
         if (fieldInitializers == null)
             return;
 
         ConstPool cp = cf.getConstPool();
-        List list = cf.getMethods();
-        int n = list.size();
-        for (int i = 0; i < n; ++i) {
-            MethodInfo minfo = (MethodInfo) list.get(i);
+        List<MethodInfo> methods = cf.getMethods();
+        for (MethodInfo minfo:methods) {
             if (minfo.isConstructor()) {
-                org.hotswap.agent.javassist.bytecode.CodeAttribute codeAttr = minfo.getCodeAttribute();
+                CodeAttribute codeAttr = minfo.getCodeAttribute();
                 if (codeAttr != null)
                     try {
                         Bytecode init = new Bytecode(cp, 0,
-                                codeAttr.getMaxLocals());
-                        org.hotswap.agent.javassist.CtClass[] params
-                                = Descriptor.getParameterTypes(
-                                minfo.getDescriptor(),
-                                classPool);
+                                                codeAttr.getMaxLocals());
+                        CtClass[] params
+                            = Descriptor.getParameterTypes(
+                                                minfo.getDescriptor(),
+                                                classPool);
                         int stacksize = makeFieldInitializer(init, params);
                         insertAuxInitializer(codeAttr, init, stacksize);
                         minfo.rebuildStackMapIf6(classPool, cf);
-                    } catch (BadBytecode e) {
-                        throw new org.hotswap.agent.javassist.CannotCompileException(e);
+                    }
+                    catch (BadBytecode e) {
+                        throw new CannotCompileException(e);
                     }
             }
         }
     }
 
-    private static void insertAuxInitializer(org.hotswap.agent.javassist.bytecode.CodeAttribute codeAttr,
+    private static void insertAuxInitializer(CodeAttribute codeAttr,
                                              Bytecode initializer,
                                              int stacksize)
-            throws BadBytecode {
+        throws BadBytecode
+    {
         CodeIterator it = codeAttr.iterator();
         int index = it.skipSuperConstructor();
         if (index < 0) {
@@ -1543,21 +1786,23 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
             codeAttr.setMaxStack(stacksize);
     }
 
-    private int makeFieldInitializer(Bytecode code, org.hotswap.agent.javassist.CtClass[] parameters)
-            throws org.hotswap.agent.javassist.CannotCompileException, org.hotswap.agent.javassist.NotFoundException {
+    private int makeFieldInitializer(Bytecode code, CtClass[] parameters)
+        throws CannotCompileException, NotFoundException
+    {
         int stacksize = 0;
         Javac jv = new Javac(code, this);
         try {
             jv.recordParams(parameters, false);
-        } catch (CompileError e) {
-            throw new org.hotswap.agent.javassist.CannotCompileException(e);
+        }
+        catch (CompileError e) {
+            throw new CannotCompileException(e);
         }
 
         for (FieldInitLink fi = fieldInitializers; fi != null; fi = fi.next) {
-            org.hotswap.agent.javassist.CtField f = fi.field;
-            if (!org.hotswap.agent.javassist.Modifier.isStatic(f.getModifiers())) {
+            CtField f = fi.field;
+            if (!Modifier.isStatic(f.getModifiers())) {
                 int s = fi.init.compile(f.getType(), f.getName(), code,
-                        parameters, jv);
+                                        parameters, jv);
                 if (stacksize < s)
                     stacksize = s;
             }
@@ -1568,21 +1813,20 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
 
     // Methods used by CtNewWrappedMethod
 
-    Hashtable getHiddenMethods() {
+    Map<CtMethod,String> getHiddenMethods() {
         if (hiddenMethods == null)
-            hiddenMethods = new Hashtable();
+            hiddenMethods = new Hashtable<CtMethod,String>();
 
         return hiddenMethods;
     }
 
-    int getUniqueNumber() {
-        return uniqueNumberSeed++;
-    }
+    int getUniqueNumber() { return uniqueNumberSeed++; }
 
+    @Override
     public String makeUniqueName(String prefix) {
-        HashMap table = new HashMap();
+        Map<Object,CtClassType> table = new HashMap<Object,CtClassType>();
         makeMemberList(table);
-        Set keys = table.keySet();
+        Set<Object> keys = table.keySet();
         String[] methods = new String[keys.size()];
         keys.toArray(methods);
 
@@ -1609,49 +1853,40 @@ class CtClassType extends org.hotswap.agent.javassist.CtClass {
         return true;
     }
 
-    private void makeMemberList(HashMap table) {
+    private void makeMemberList(Map<Object,CtClassType> table) {
         int mod = getModifiers();
-        if (org.hotswap.agent.javassist.Modifier.isAbstract(mod) || org.hotswap.agent.javassist.Modifier.isInterface(mod))
+        if (Modifier.isAbstract(mod) || Modifier.isInterface(mod))
             try {
-                org.hotswap.agent.javassist.CtClass[] ifs = getInterfaces();
-                int size = ifs.length;
-                for (int i = 0; i < size; i++) {
-                    org.hotswap.agent.javassist.CtClass ic = ifs[i];
+                CtClass[] ifs = getInterfaces();
+                for (CtClass ic : ifs)
                     if (ic != null && ic instanceof CtClassType)
-                        ((CtClassType) ic).makeMemberList(table);
-                }
-            } catch (org.hotswap.agent.javassist.NotFoundException e) {
+                        ((CtClassType)ic).makeMemberList(table);
             }
+            catch (NotFoundException e) {}
 
         try {
-            org.hotswap.agent.javassist.CtClass s = getSuperclass();
+            CtClass s = getSuperclass();
             if (s != null && s instanceof CtClassType)
-                ((CtClassType) s).makeMemberList(table);
-        } catch (org.hotswap.agent.javassist.NotFoundException e) {
+                ((CtClassType)s).makeMemberList(table);
         }
+        catch (NotFoundException e) {}
 
-        List list = getClassFile2().getMethods();
-        int n = list.size();
-        for (int i = 0; i < n; i++) {
-            MethodInfo minfo = (MethodInfo) list.get(i);
+        List<MethodInfo> methods = getClassFile2().getMethods();
+        for (MethodInfo minfo:methods)
             table.put(minfo.getName(), this);
-        }
 
-        list = getClassFile2().getFields();
-        n = list.size();
-        for (int i = 0; i < n; i++) {
-            FieldInfo finfo = (FieldInfo) list.get(i);
+        List<FieldInfo> fields = getClassFile2().getFields();
+        for (FieldInfo finfo:fields)
             table.put(finfo.getName(), this);
-        }
     }
 }
 
 class FieldInitLink {
     FieldInitLink next;
-    org.hotswap.agent.javassist.CtField field;
-    org.hotswap.agent.javassist.CtField.Initializer init;
+    CtField field;
+    CtField.Initializer init;
 
-    FieldInitLink(org.hotswap.agent.javassist.CtField f, org.hotswap.agent.javassist.CtField.Initializer i) {
+    FieldInitLink(CtField f, CtField.Initializer i) {
         next = null;
         field = f;
         init = i;

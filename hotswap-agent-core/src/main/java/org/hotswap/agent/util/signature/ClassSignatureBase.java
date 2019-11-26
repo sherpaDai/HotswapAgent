@@ -1,6 +1,25 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.util.signature;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
@@ -18,6 +37,8 @@ public abstract class ClassSignatureBase {
     private static final String[] IGNORED_METHODS = new String[] { "annotationType", "equals", "hashCode", "toString" };
 
     private final Set<ClassSignatureElement> elements = new HashSet<>();
+
+    protected static final String SWITCH_TABLE_METHOD_PREFIX = "$SWITCH_TABLE$"; // java stores switch table to class field, signature should ingore it
 
     /**
      * Evaluate and return signature value
@@ -71,19 +92,43 @@ public abstract class ClassSignatureBase {
                         } else {
                             printComma = true;
                         }
+
+                        if (value.getClass().isArray()) {
+                            value = arrayToString(value);
+                        }
+
                         b.append(method.getName() + "=" + value.getClass() + ":" + value);
                     }
                 }
             }
             b.append(")");
             // TODO : sometimes for CtFile object.annotationType() is not known an it fails here
-            // b.append(object.annotationType().getName());
+            // v.d. : uncommented in v1.1 alpha with javassist update (3.21) to check if there is still problem
+            b.append(object.annotationType().getName());
             if (i<a.length-1) {
                 b.append(",");
             }
         }
         b.append(']');
         return b.toString();
+    }
+
+    private Object arrayToString(Object value) {
+        Object result = value;
+        try {
+            try {
+                Method toStringMethod = Arrays.class.getMethod("toString", value.getClass());
+                // maybe because value is a subclass of Object[]
+                result = toStringMethod.invoke(null, value);
+            } catch (NoSuchMethodException e) {
+                if (value instanceof Object[]) {
+                    Method toStringMethod = Arrays.class.getMethod("toString", Object[].class);
+                    result = toStringMethod.invoke(null, value);
+                }
+            }
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e ) {
+        }
+        return result;
     }
 
     protected String annotationToString(Object[][] a) {

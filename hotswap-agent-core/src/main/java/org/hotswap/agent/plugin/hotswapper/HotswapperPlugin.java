@@ -1,3 +1,21 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.hotswapper;
 
 import org.hotswap.agent.HotswapAgent;
@@ -43,7 +61,7 @@ public class HotswapperPlugin {
     PluginManager pluginManager;
 
     // synchronize on this map to wait for previous processing
-    final Map<Class<?>, byte[]> reloadMap = new HashMap<Class<?>, byte[]>();
+    final Map<Class<?>, byte[]> reloadMap = new HashMap<>();
 
     // command to do actual hotswap. Single command to merge possible multiple reload actions.
     Command hotswapCommand;
@@ -51,7 +69,7 @@ public class HotswapperPlugin {
     /**
      * For each changed class create a reload command.
      */
-    @OnClassFileEvent(classNameRegexp = ".*", events = {FileEvent.MODIFY})
+    @OnClassFileEvent(classNameRegexp = ".*", events = {FileEvent.MODIFY, FileEvent.CREATE})
     public void watchReload(CtClass ctClass, ClassLoader appClassLoader, URL url) throws IOException, CannotCompileException {
         if (!ClassLoaderHelper.isClassLoaded(appClassLoader, ctClass.getName())) {
             LOGGER.trace("Class {} not loaded yet, no need for autoHotswap, skipped URL {}", ctClass.getName(), url);

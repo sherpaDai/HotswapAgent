@@ -1,24 +1,31 @@
+/*
+ * Copyright 2013-2019 the HotswapAgent authors.
+ *
+ * This file is part of HotswapAgent.
+ *
+ * HotswapAgent is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * HotswapAgent is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with HotswapAgent. If not, see http://www.gnu.org/licenses/.
+ */
 package org.hotswap.agent.plugin.owb.testBeansHotswap;
 
 import javax.enterprise.context.Dependent;
-import javax.inject.Inject;
-
-import org.hotswap.agent.plugin.owb.testBeans.ChangedHelloProducer;
 
 /**
- * Change BeanHelloProducer2, use @Inject to check that new bean is really created. Test Service that uses this
- * bean that it is indeed recreated with new configuration.
+ * Basic dependant bean
  */
 @Dependent
 public class HelloProducer2 {
-    @Inject
-    ChangedHelloProducer changedHello;
-
     public String hello() {
-        return changedHello.hello() + "2";
-    }
-
-    public String helloNewMethod() {
-        return "Hello from helloNewMethod2";
+        return "HelloProducer2.hello()";
     }
 }
