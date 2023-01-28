@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -20,13 +20,18 @@ package org.hotswap.agent.plugin.spring.testBeans;
 
 public class BeanServiceNoAutowireImpl implements BeanService {
     BeanRepository beanRepository;
-    //BeanChangedRepository beanRepository;
 
+    @Override
     public String hello() {
         return beanRepository.hello() + " Service";
     }
 
     public void setBeanRepository(BeanRepository beanRepository) {
         this.beanRepository = beanRepository;
+    }
+
+    @Override
+    public String isInjectFieldInjected() {
+        return "no";
     }
 }

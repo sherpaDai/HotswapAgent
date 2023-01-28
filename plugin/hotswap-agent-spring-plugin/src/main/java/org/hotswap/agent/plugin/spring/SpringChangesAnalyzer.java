@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -74,6 +74,7 @@ public class SpringChangesAnalyzer {
                 || classBeingRedefined.getName().startsWith("com.sun.proxy.$Proxy")
                 || classBeingRedefined.getSimpleName().contains("$$Enhancer")
                 || classBeingRedefined.getSimpleName().contains("$$_jvst") // javassist proxy
+                || classBeingRedefined.getSimpleName().contains("$HibernateProxy$")
                 ;
     }
 

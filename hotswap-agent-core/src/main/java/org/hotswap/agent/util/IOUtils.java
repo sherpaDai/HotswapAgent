@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -20,14 +20,22 @@ package org.hotswap.agent.util;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.URI;
 import java.net.URL;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 
 import org.hotswap.agent.javassist.ClassPool;
 import org.hotswap.agent.logging.AgentLogger;
+import org.xml.sax.InputSource;
+import sun.nio.ch.ChannelInputStream;
 
 /**
  * IO utils (similar to apache commons).
@@ -155,5 +163,66 @@ public class IOUtils {
      */
     public static String urlToClassName(URI uri) throws IOException {
         return ClassPool.getDefault().makeClass(uri.toURL().openStream()).getName();
+    }
+
+    /**
+     * Extract file name from input stream.
+     *
+     * @param is the is
+     * @return the string
+     */
+    public static String extractFileNameFromInputStream(InputStream is) {
+        try {
+            if (is instanceof ChannelInputStream) {
+                ReadableByteChannel ch = (ReadableByteChannel) ReflectionHelper.get(is, "ch");
+                return ch instanceof FileChannel ? (String) ReflectionHelper.get(ch, "path") : null;
+            }
+            while (true) {
+                if (is instanceof FileInputStream) {
+                    return (String) ReflectionHelper.get(is, "path");
+                }
+                if (!(is instanceof FilterInputStream)) {
+                    break;
+                }
+                is = (InputStream) ReflectionHelper.get(is, "in");
+            }
+        } catch (IllegalArgumentException e) {
+            LOGGER.error("extractFileNameFromInputStream() failed.", e);
+        }
+        return null;
+    }
+
+    /**
+     * Extract file name from reader.
+     *
+     * @param reader the reader
+     * @return the string
+     */
+    public static String extractFileNameFromReader(Reader reader) {
+        try {
+            if (reader instanceof InputStreamReader) {
+                InputStream is = (InputStream) ReflectionHelper.get(reader, "lock");
+                return extractFileNameFromInputStream(is);
+            }
+        } catch (IllegalArgumentException e) {
+            LOGGER.error("extractFileNameFromReader() failed.", e);
+        }
+        return null;
+    }
+
+    /**
+     * Extract file name from input source.
+     *
+     * @param inputSource the input source
+     * @return the string
+     */
+    public static String extractFileNameFromInputSource(InputSource inputSource) {
+        if (inputSource.getByteStream() != null) {
+            return extractFileNameFromInputStream(inputSource.getByteStream());
+        }
+        if (inputSource.getCharacterStream() != null) {
+            return extractFileNameFromReader(inputSource.getCharacterStream());
+        }
+        return null;
     }
 }

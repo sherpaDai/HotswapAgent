@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -106,6 +106,10 @@ public class PluginConfiguration {
                     properties.load(configurationURL.openStream());
 
                 }
+                
+                // Add logging properties defined in jvm argument like -DLOGGER=warning
+                System.getProperties().forEach((key, value) -> properties.put(key, value));
+
             } catch (Exception e) {
                 LOGGER.error("Error while loading 'hotswap-agent.properties' from base URL " + configurationURL, e);
             }

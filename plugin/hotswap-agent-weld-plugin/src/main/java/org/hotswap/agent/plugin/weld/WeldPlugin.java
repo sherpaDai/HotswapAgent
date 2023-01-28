@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -60,8 +60,8 @@ import org.hotswap.agent.watch.Watcher;
  */
 @Plugin(name = "Weld",
         description = "Weld framework(http://weld.cdi-spec.org/). Reload, reinject bean, redefine proxy class after bean class definition/redefinition.",
-        testedVersions = {"2.2.5-2.2.16, 2.3.x, 2.4.0, 3.0.x"},
-        expectedVersions = {"All between 2.2.5 - 3.0.x"},
+        testedVersions = {"2.2.5-2.2.16, 2.3.x-3.1.x"},
+        expectedVersions = {"All between 2.2.5-3.1.x"},
         supportClass = {BeanDeploymentArchiveTransformer.class, ProxyFactoryTransformer.class, AbstractClassBeanTransformer.class, CdiContextsTransformer.class})
 public class WeldPlugin {
 
@@ -102,7 +102,7 @@ public class WeldPlugin {
 
     public void init() {
         if (!initialized) {
-            LOGGER.info("CDI/Weld plugin initialized.");
+            LOGGER.info("Weld plugin initialized.");
             doInit();
         }
     }
@@ -110,14 +110,14 @@ public class WeldPlugin {
 
     public void initInJBossAS() {
         if (!initialized) {
-            LOGGER.info("CDI/Weld plugin initialized in JBossAS.");
+            LOGGER.info("Weld plugin initialized in JBossAS.");
             doInit();
         }
     }
 
     public void initInGlassFish() {
         if (!initialized) {
-            LOGGER.info("CDI/Weld plugin initialized in GlassFish.");
+            LOGGER.info("Weld plugin initialized in GlassFish.");
             doInit();
         }
     }

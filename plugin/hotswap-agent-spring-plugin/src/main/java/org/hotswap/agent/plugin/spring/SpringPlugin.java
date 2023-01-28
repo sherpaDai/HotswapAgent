@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -60,7 +60,7 @@ import org.hotswap.agent.watch.Watcher;
  * @author Jiri Bubnik
  */
 @Plugin(name = "Spring", description = "Reload Spring configuration after class definition/change.",
-        testedVersions = {"All between 3.0.1 - 4.2.6"}, expectedVersions = {"3x", "4x"},
+        testedVersions = {"All between 3.0.1 - 5.2.2"}, expectedVersions = {"3x", "4x", "5x"},
         supportClass = {ClassPathBeanDefinitionScannerTransformer.class, ProxyReplacerTransformer.class, XmlBeanDefinitionScannerTransformer.class})
 public class SpringPlugin {
     private static AgentLogger LOGGER = AgentLogger.getLogger(SpringPlugin.class);

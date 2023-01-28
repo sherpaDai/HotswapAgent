@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -61,7 +61,6 @@ public class ResteasyRegistryPlugin {
 
     @Init
     Scheduler scheduler;
-
 
     Object servletContext;
 
@@ -173,6 +172,6 @@ public class ResteasyRegistryPlugin {
 
     @Init
     public void initializeInstance(PluginConfiguration pluginConfiguration) {
-        LOGGER.info("ResteasyRegistryPlugin Initializing");
+        LOGGER.info("ResteasyRegistry plugin initializing");
     }
 }

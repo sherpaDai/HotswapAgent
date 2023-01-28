@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -54,7 +54,11 @@ import org.apache.webbeans.config.WebBeansContext;
 import org.apache.webbeans.container.BeanManagerImpl;
 import org.apache.webbeans.container.InjectableBeanManager;
 import org.apache.webbeans.container.InjectionTargetFactoryImpl;
+import org.apache.webbeans.portable.AbstractProducer;
 import org.apache.webbeans.portable.AnnotatedElementFactory;
+import org.apache.webbeans.proxy.NormalScopeProxyFactory;
+import org.apache.webbeans.proxy.OwbInterceptorProxy;
+import org.apache.webbeans.proxy.OwbNormalScopeProxy;
 import org.apache.webbeans.spi.BeanArchiveService.BeanArchiveInformation;
 import org.apache.webbeans.spi.BeanArchiveService.BeanDiscoveryMode;
 import org.hotswap.agent.logging.AgentLogger;
@@ -75,12 +79,6 @@ import org.hotswap.agent.util.signature.ClassSignatureElement;
 public class BeanClassRefreshAgent {
 
     private static AgentLogger LOGGER = AgentLogger.getLogger(BeanClassRefreshAgent.class);
-
-    /**
-     * Flag for checking reload status. It is used in unit tests for waiting for reload finish.
-     * Set flag to true in the unit test class and wait until the flag is false again.
-     */
-    public static boolean reloadFlag = false;
 
     /**
      * Reload bean in existing bean manager. Called by a reflection command from BeanRefreshCommand transformer.
@@ -109,8 +107,6 @@ public class BeanClassRefreshAgent {
 
         } catch (ClassNotFoundException e) {
             LOGGER.error("Bean class '{}' not found.", e, beanClassName);
-        } finally {
-            reloadFlag = false;
         }
     }
 
@@ -232,6 +228,18 @@ public class BeanClassRefreshAgent {
         // Clear AnnotatedElementFactory caches
         annotatedElementFactory.clear();
 
+        Object forwardingMethIterceptors = null;
+
+        if (bean.getProducer() instanceof AbstractProducer) {
+            // methodInterceptors must be the same instance. It is stored in field owbIntDecHandler of existing
+            // InterceptedProxy's instances
+            try {
+                forwardingMethIterceptors = ReflectionHelper.get(bean.getProducer(), "methodInterceptors");
+            } catch (IllegalArgumentException e) {
+                LOGGER.warning("Field AbstractProducer.methodInterceptors is not accessible", e);
+            }
+        }
+
         AnnotatedType annotatedType = annotatedElementFactory.newAnnotatedType(bean.getBeanClass());
 
         ReflectionHelper.set(bean, InjectionTargetBean.class, "annotatedType", annotatedType);
@@ -249,6 +257,12 @@ public class BeanClassRefreshAgent {
         InjectionTarget injectionTarget = factory.createInjectionTarget(bean);
         ReflectionHelper.set(bean, InjectionTargetBean.class, "injectionTarget", injectionTarget);
 
+        if (injectionTarget instanceof AbstractProducer) {
+            if (forwardingMethIterceptors != null) {
+                ReflectionHelper.set(injectionTarget, AbstractProducer.class, "methodInterceptors", forwardingMethIterceptors);
+            }
+        }
+
         LOGGER.debug("New annotated type created for bean '{}'", bean.getBeanClass());
     }
 
@@ -256,6 +270,7 @@ public class BeanClassRefreshAgent {
     private static void doReinjectRegisteredBeanInstances(BeanManagerImpl beanManager, InjectionTargetBean bean) {
         for (Object instance: HaCdiCommons.getBeanInstances(bean)) {
             if (instance != null) {
+                instance = unwrapInstance(beanManager, instance);
                 bean.getProducer().inject(instance, beanManager.createCreationalContext(bean));
                 LOGGER.info("Bean '{}' injection points was reinjected.", bean.getBeanClass().getName());
             } else {
@@ -268,9 +283,20 @@ public class BeanClassRefreshAgent {
     private static void doReinjectBeanInstance(BeanManagerImpl beanManager, InjectionTargetBean bean, Context context) {
         Object instance = context.get(bean);
         if (instance != null) {
+            instance = unwrapInstance(beanManager, instance);
             bean.getProducer().inject(instance, beanManager.createCreationalContext(bean));
             LOGGER.info("Bean '{}' injection points was reinjected.", bean.getBeanClass().getName());
         }
+    }
+
+    private static Object unwrapInstance(BeanManagerImpl beanManager, Object instance) {
+        if (instance instanceof OwbNormalScopeProxy) {
+            instance = NormalScopeProxyFactory.unwrapInstance(instance);
+        }
+        if (instance instanceof OwbInterceptorProxy) {
+            instance = beanManager.getWebBeansContext().getInterceptorDecoratorProxyFactory().unwrapInstance(instance);
+        }
+        return instance;
     }
 
     private static void doReloadBeanInBeanContexts(BeanManagerImpl beanManager, InjectionTargetBean<?> bean) {
@@ -334,6 +360,15 @@ public class BeanClassRefreshAgent {
     @SuppressWarnings("rawtypes")
     private static void doDefineNewBean(BeanManagerImpl beanManager, Class<?> beanClass, URL beanArchiveUrl) {
 
+        WebBeansContext wbc = beanManager.getWebBeansContext();
+
+        AnnotatedElementFactory annotatedElementFactory = wbc.getAnnotatedElementFactory();
+        // Clear AnnotatedElementFactory caches (is it necessary for definition ?)
+        annotatedElementFactory.clear();
+
+        // Injection resolver cache must be cleared before / after definition
+        beanManager.getInjectionResolver().clearCaches();
+
         BeanArchiveInformation beanArchiveInfo =
                 beanManager.getWebBeansContext().getBeanArchiveService().getBeanArchiveInformation(beanArchiveUrl);
 
@@ -348,15 +383,6 @@ public class BeanClassRefreshAgent {
                 return;
             }
         }
-
-        WebBeansContext wbc = beanManager.getWebBeansContext();
-
-        AnnotatedElementFactory annotatedElementFactory = wbc.getAnnotatedElementFactory();
-        // Clear AnnotatedElementFactory caches (is it necessary for definition ?)
-        annotatedElementFactory.clear();
-
-        // Injection resolver cache must be cleared before / after definition
-        beanManager.getInjectionResolver().clearCaches();
 
         AnnotatedType<?> annotatedType = annotatedElementFactory.newAnnotatedType(beanClass);
         BeanAttributesImpl<?> attributes = BeanAttributesBuilder.forContext(wbc).newBeanAttibutes(annotatedType).build();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -24,6 +24,7 @@ import org.hotswap.agent.annotation.LoadEvent;
 import org.hotswap.agent.annotation.OnClassLoadEvent;
 import org.hotswap.agent.annotation.Plugin;
 import org.hotswap.agent.javassist.CtClass;
+import org.hotswap.agent.javassist.bytecode.ClassFile;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.util.ReflectionHelper;
 
@@ -39,8 +40,8 @@ import org.hotswap.agent.util.ReflectionHelper;
  */
 @Plugin(name = "JdkPlugin",
         description = "",
-        testedVersions = {"openjdk 1.7.0.95, 1.8.0_74"},
-        expectedVersions = {"All between openjdk 1.7 - 1.8"}
+        testedVersions = {"openjdk 1.7.0.95, 1.8.0_74, 1.11.0_5"},
+        expectedVersions = {"All between openjdk 1.7 - 1.11"}
         )
 public class JdkPlugin {
 
@@ -53,7 +54,7 @@ public class JdkPlugin {
     public static boolean reloadFlag;
 
     @OnClassLoadEvent(classNameRegexp = ".*", events = LoadEvent.REDEFINE, skipSynthetic=false)
-    public static void flushBeanIntrospectorsCaches(ClassLoader classLoader, CtClass ctClass) {
+    public static void flushBeanIntrospectorCaches(ClassLoader classLoader, CtClass ctClass) {
         try {
             LOGGER.debug("Flushing {} from introspector", ctClass.getName());
 
@@ -61,9 +62,7 @@ public class JdkPlugin {
             Class<?> threadGroupCtxClass = classLoader.loadClass("java.beans.ThreadGroupContext");
             Class<?> introspectorClass = classLoader.loadClass("java.beans.Introspector");
 
-            Object declaredMethodCache = ReflectionHelper.get(null, introspectorClass, "declaredMethodCache");
-
-            synchronized (declaredMethodCache) {
+            synchronized (classLoader) {
                 Object contexts = ReflectionHelper.get(null, threadGroupCtxClass, "contexts");
                 Object table[] = (Object[]) ReflectionHelper.get(contexts, "table");
 
@@ -80,12 +79,41 @@ public class JdkPlugin {
                     }
                 }
 
-                LOGGER.trace("Removing class from declaredMethodCache.");
-                ReflectionHelper.invoke(declaredMethodCache, declaredMethodCache.getClass(), "put",
-                        new Class[] { Object.class, Object.class }, clazz, null);
+                // java.beans.Introspector#declaredMethodCache was removed in j13
+                // https://github.com/openjdk/jdk13u/commit/921b46738e0c3aaa2bf8c62e0accb0a5056190d3
+                Object declaredMethodCache = ReflectionHelper.getNoException(null, introspectorClass, "declaredMethodCache");
+
+                if (declaredMethodCache != null) {
+                    LOGGER.info("Removing class from declaredMethodCache.");
+                    ReflectionHelper.invoke(declaredMethodCache, declaredMethodCache.getClass(), "put",
+                            new Class[] { Object.class, Object.class }, clazz, null);
+                }
             }
         } catch (Exception e) {
             LOGGER.error("classReload() exception {}.", e.getMessage());
+        } finally {
+            reloadFlag = false;
+        }
+    }
+
+    @OnClassLoadEvent(classNameRegexp = ".*", events = LoadEvent.REDEFINE, skipSynthetic=false)
+    public static void flushIntrospectClassInfoCache(ClassLoader classLoader, CtClass ctClass) {
+        // com.sun.beans.introspect.ClassInfo was intruduced in j9
+        if (ClassFile.MAJOR_VERSION < ClassFile.JAVA_9) {
+            return;
+        }
+        try {
+            LOGGER.debug("Flushing {} from com.sun.beans.introspect.ClassInfo cache", ctClass.getName());
+
+            Class<?> clazz = classLoader.loadClass(ctClass.getName());
+            Class<?> classInfo = classLoader.loadClass("com.sun.beans.introspect.ClassInfo");
+
+            Object cache = ReflectionHelper.get(null, classInfo, "CACHE");
+            if (cache != null) {
+                ReflectionHelper.invoke(cache, cache.getClass(), "clear", new Class[] { }, null);
+            }
+        } catch (Exception e) {
+            LOGGER.error("flushClassInfoCache() exception {}.", e.getMessage());
         } finally {
             reloadFlag = false;
         }
@@ -117,4 +145,5 @@ public class JdkPlugin {
             reloadFlag = false;
         }
     }
+
 }

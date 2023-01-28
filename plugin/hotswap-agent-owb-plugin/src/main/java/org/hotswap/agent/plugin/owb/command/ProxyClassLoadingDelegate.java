@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -43,6 +43,12 @@ public class ProxyClassLoadingDelegate {
         }
     };
 
+    private static String generatingProxyName;
+
+    public static void setGeneratingProxyName(String generatingProxyName) {
+        ProxyClassLoadingDelegate.generatingProxyName = generatingProxyName;
+    }
+
     public static final void beginProxyRegeneration() {
         MAGIC_IN_PROGRESS.set(true);
     }
@@ -53,14 +59,16 @@ public class ProxyClassLoadingDelegate {
 
     public static Class<?> forName(String name, boolean initialize, ClassLoader loader) throws ClassNotFoundException {
         if (MAGIC_IN_PROGRESS.get()) {
-            throw new ClassNotFoundException("HotswapAgent");
+            if (generatingProxyName == null || generatingProxyName.equals(name)) {
+                throw new ClassNotFoundException("HotswapAgent");
+            }
         }
         return Class.forName(name, initialize, loader);
     }
 
     public static Class<?> defineAndLoadClass(AbstractProxyFactory proxyFactory, ClassLoader classLoader, String proxyName, byte[] proxyBytes) {
         if (MAGIC_IN_PROGRESS.get()) {
-            Class<?> reloaded = reloadProxyByteCode(classLoader, proxyName, proxyBytes);
+            Class<?> reloaded = reloadProxyByteCode(classLoader, proxyName, proxyBytes, null);
             if (reloaded != null) {
                 return reloaded;
             }
@@ -77,7 +85,7 @@ public class ProxyClassLoadingDelegate {
 
     public static Class<?> defineAndLoadClassWithUnsafe(Object unsafe, ClassLoader classLoader, String proxyName, byte[] proxyBytes) {
         if (MAGIC_IN_PROGRESS.get()) {
-            Class<?> reloaded = reloadProxyByteCode(classLoader, proxyName, proxyBytes);
+            Class<?> reloaded = reloadProxyByteCode(classLoader, proxyName, proxyBytes, null);
             if (reloaded != null) {
                 return reloaded;
             }
@@ -92,7 +100,24 @@ public class ProxyClassLoadingDelegate {
         return null;
     }
 
-    private static Class<?> reloadProxyByteCode(ClassLoader classLoader, String proxyName, byte[] proxyBytes) {
+    public static Class<?> defineAndLoadClassWithUnsafe(Object unsafe, ClassLoader classLoader, String proxyName, byte[] proxyBytes, Class<?> classToProxy) {
+        if (MAGIC_IN_PROGRESS.get()) {
+            Class<?> reloaded = reloadProxyByteCode(classLoader, proxyName, proxyBytes, classToProxy);
+            if (reloaded != null) {
+                return reloaded;
+            }
+        }
+        try {
+            return (Class<?>) ReflectionHelper.invoke(unsafe, unsafe.getClass(), "defineAndLoadClass",
+                    new Class[]{ClassLoader.class, String.class, byte[].class, Class.class},
+                    classLoader, proxyName, proxyBytes, classToProxy);
+        } catch (Exception e) {
+            LOGGER.error("defineAndLoadClass() exception {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private static Class<?> reloadProxyByteCode(ClassLoader classLoader, String proxyName, byte[] proxyBytes, Class<?> classToProxy) {
         try {
             final Class<?> originalProxyClass = classLoader.loadClass(proxyName);
             try {

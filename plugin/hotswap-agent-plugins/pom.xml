@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.hotswapagent</groupId>
         <artifactId>hotswap-agent-parent</artifactId>
-        <version>1.3.1-SNAPSHOT</version>
+        <version>1.4.2-SNAPSHOT</version>
         <relativePath>../../hotswap-agent-parent/pom.xml</relativePath>
     </parent>
 
@@ -108,12 +108,6 @@
 
         <dependency>
             <groupId>org.hotswapagent</groupId>
-            <artifactId>hotswap-agent-seam-plugin</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.hotswapagent</groupId>
             <artifactId>hotswap-agent-el-resolver-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -138,6 +132,12 @@
 
         <dependency>
             <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-owb-jakarta-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
             <artifactId>hotswap-agent-proxy-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -151,6 +151,12 @@
         <dependency>
             <groupId>org.hotswapagent</groupId>
             <artifactId>hotswap-agent-weld-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-weld-jakarta-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -180,6 +186,13 @@
 
         <dependency>
             <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-weblogic-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
             <artifactId>hotswap-agent-vaadin-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -204,6 +217,30 @@
         <dependency>
             <groupId>org.hotswapagent</groupId>
             <artifactId>hotswap-agent-undertow-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-mybatis-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-ibatis-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>        
+
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-jackson-plugin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hotswapagent</groupId>
+            <artifactId>hotswap-agent-idea-plugin</artifactId>
             <version>${project.version}</version>
         </dependency>
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -23,4 +23,6 @@ package org.hotswap.agent.plugin.spring.testBeans;
  */
 public interface BeanService {
     String hello();
+
+    String isInjectFieldInjected();
 }

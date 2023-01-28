@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -46,7 +46,8 @@ public class OmnifacesPlugin {
 
     public void init() {
         if (!initialized) {
-            LOGGER.info("OmnifacesPlugin plugin initialized.");
+            LOGGER.info("Omnifaces plugin initialized.");
+            initialized = true;
         }
     }
 

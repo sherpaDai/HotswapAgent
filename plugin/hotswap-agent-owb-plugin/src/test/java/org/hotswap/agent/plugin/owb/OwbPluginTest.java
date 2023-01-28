@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -26,13 +26,15 @@ import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.CDI;
 
+import org.hotswap.agent.javassist.bytecode.ClassFile;
 import org.hotswap.agent.plugin.hotswapper.HotSwapper;
-import org.hotswap.agent.plugin.owb.command.BeanClassRefreshAgent;
+import org.hotswap.agent.plugin.owb.command.BeanClassRefreshCommand;
 import org.hotswap.agent.plugin.owb.testBeans.DependentHello1;
 import org.hotswap.agent.plugin.owb.testBeans.HelloProducer1;
 import org.hotswap.agent.plugin.owb.testBeans.HelloService;
 import org.hotswap.agent.plugin.owb.testBeans.HelloServiceDependant;
 import org.hotswap.agent.plugin.owb.testBeans.HelloServiceImpl1;
+import org.hotswap.agent.plugin.owb.testBeans.InterceptedBean;
 import org.hotswap.agent.plugin.owb.testBeans.ProxyHello1;
 import org.hotswap.agent.plugin.owb.testBeans.ProxyHosting;
 import org.hotswap.agent.plugin.owb.testBeans.SessionBean1;
@@ -40,6 +42,7 @@ import org.hotswap.agent.plugin.owb.testBeansHotswap.DependentHello2;
 import org.hotswap.agent.plugin.owb.testBeansHotswap.HelloProducer2;
 import org.hotswap.agent.plugin.owb.testBeansHotswap.HelloProducer3;
 import org.hotswap.agent.plugin.owb.testBeansHotswap.HelloServiceImpl2;
+import org.hotswap.agent.plugin.owb.testBeansHotswap.InterceptedBean2;
 import org.hotswap.agent.plugin.owb.testBeansHotswap.ProxyHello2;
 import org.hotswap.agent.plugin.owb.testBeansHotswap.SessionBean2;
 import org.hotswap.agent.util.ReflectionHelper;
@@ -61,6 +64,15 @@ public class OwbPluginTest extends HAAbstractUnitTest {
         Bean<T> bean = (Bean<T>) beanManager.resolve(beanManager.getBeans(beanClass));
         T result = beanManager.getContext(bean.getScope()).get(bean, beanManager.createCreationalContext(bean));
         return result;
+    }
+
+    public static <T> T getReference(Class<T> beanClass) {
+        BeanManager beanManager = CDI.current().getBeanManager();
+        Bean<T> bean = (Bean<T>) beanManager.resolve(beanManager.getBeans(beanClass));
+        if (bean != null) {
+            return (T) beanManager.getReference(bean, beanClass, beanManager.createCreationalContext(bean));
+        }
+        return null;
     }
 
     @Before
@@ -194,6 +206,7 @@ public class OwbPluginTest extends HAAbstractUnitTest {
     @Test
     public void newBeanClassIsManagedBeanReRunTestOnlyAfterMvnClean() throws Exception {
         try {
+            ClassFile.MAJOR_VERSION = ClassFile.JAVA_11; // hack, ASM9 does not support java17 (owb 2.0.26)
             OwbPlugin.isTestEnvironment = true;
             Class<?> clazz = getClass();
             String path = clazz.getResource(clazz.getSimpleName() + ".class")
@@ -237,13 +250,28 @@ public class OwbPluginTest extends HAAbstractUnitTest {
         assertEquals("SessionBean1.hello():ProxyHello1.hello()", sessionBean.hello());
     }
 
+    @Test
+    public void interceptedBeanTest() throws Exception {
+        InterceptedBean interceptedBean = getReference(InterceptedBean.class);
+        assertEquals("TestInterceptor:InterceptedBean.hello()", interceptedBean.hello());
+        swapClasses(InterceptedBean.class, InterceptedBean2.class.getName());
+
+        assertEquals("InterceptedBean2.hello():TestInterceptor:InterceptedBean2.hello2()", interceptedBean.hello());
+
+        // return configuration
+        swapClasses(InterceptedBean.class, InterceptedBean.class.getName());
+        String s = interceptedBean.hello();
+        System.out.println(s);
+        assertEquals("TestInterceptor:InterceptedBean.hello()", s);
+    }
+
     private void swapClasses(Class original, String swap) throws Exception {
-        BeanClassRefreshAgent.reloadFlag = true;
+        BeanClassRefreshCommand.reloadFlag = true;
         HotSwapper.swapClasses(original, swap);
         assertTrue(WaitHelper.waitForCommand(new WaitHelper.Command() {
             @Override
             public boolean result() throws Exception {
-                return !BeanClassRefreshAgent.reloadFlag;
+                return !BeanClassRefreshCommand.reloadFlag;
             }
         }));
 

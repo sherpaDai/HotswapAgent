@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -290,6 +290,9 @@ public class PluginRegistry {
     protected Class<Object> getPluginClass(String pluginClass) {
         try {
             // noinspection unchecked
+            if (getClass().getClassLoader() == null) {
+                return (Class<Object>) Class.forName(pluginClass, true, null);
+            }
             return (Class<Object>) getClass().getClassLoader().loadClass(pluginClass);
         } catch (ClassNotFoundException e) {
             throw new IllegalArgumentException("Plugin class not found " + pluginClass, e);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -47,8 +47,8 @@ import org.hotswap.agent.util.classloader.WatchResourcesClassLoader;
  */
 @Plugin(name = "Tomcat", description = "Catalina based servlet containers.",
         testedVersions = {"7.0.50"},
-        expectedVersions = {"6x","7x", "8x"},
-        supportClass={WebappLoaderTransformer.class}
+        expectedVersions = {"6x","7x", "8x", "9.x"},
+        supportClass = {WebappLoaderTransformer.class}
 )
 public class TomcatPlugin {
     private static AgentLogger LOGGER = AgentLogger.getLogger(TomcatPlugin.class);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -168,6 +168,6 @@ public class WildFlyELResolverPlugin {
      */
     @Init
     public void initializeInstance(PluginConfiguration pluginConfiguration) {
-        LOGGER.info("WildFlyELResolverPlugin Initializing");
+        LOGGER.info("WildFlyELResolver plugin initialized");
     }
 }

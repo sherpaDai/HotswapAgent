@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -41,6 +41,7 @@ import org.hotswap.agent.javassist.CtClass;
 import org.hotswap.agent.javassist.NotFoundException;
 import org.hotswap.agent.logging.AgentLogger;
 import org.hotswap.agent.plugin.owb.command.BeanClassRefreshCommand;
+import org.hotswap.agent.plugin.owb.transformer.AbstractProducerTransformer;
 import org.hotswap.agent.plugin.owb.transformer.BeansDeployerTransformer;
 import org.hotswap.agent.plugin.owb.transformer.CdiContextsTransformer;
 import org.hotswap.agent.plugin.owb.transformer.ProxyFactoryTransformer;
@@ -60,9 +61,9 @@ import org.hotswap.agent.watch.Watcher;
  */
 @Plugin(name = "Owb",
         description = "OpenWebBeans framework(http://openwebbeans.apache.org/). Reload, reinject bean, redefine proxy class after bean class definition/redefinition.",
-        testedVersions = {"2.0.7"},
-        expectedVersions = {"All between 1.7.0-2.0.7"},
-        supportClass = { BeansDeployerTransformer.class, CdiContextsTransformer.class, ProxyFactoryTransformer.class})
+        testedVersions = {"1.7.0-2.0.16"},
+        expectedVersions = {"All between 1.7.0-2.0.16"},
+        supportClass = { BeansDeployerTransformer.class, CdiContextsTransformer.class, ProxyFactoryTransformer.class, AbstractProducerTransformer.class })
 public class OwbPlugin {
 
     private static AgentLogger LOGGER = AgentLogger.getLogger(OwbPlugin.class);
@@ -107,7 +108,7 @@ public class OwbPlugin {
      */
     public void init() {
         if (!initialized) {
-            LOGGER.info("CDI/Owb plugin initialized.");
+            LOGGER.info("OpenWebBeans plugin initialized.");
             initialized = true;
             beanReloadStrategy = setBeanReloadStrategy(pluginConfiguration.getProperty("owb.beanReloadStrategy"));
         }
@@ -159,6 +160,7 @@ public class OwbPlugin {
                 continue;
             }
 
+            LOGGER.info("OWB: Registerering '{}' for changes....", archivePath);
             OwbPlugin.archivePath = archivePath; // store path for unit tests (single archive expected)
 
             try {
@@ -264,7 +266,7 @@ public class OwbPlugin {
     // Owb proxies contains $$
     // DeltaSpike's proxies contains "$$"
     private boolean isSyntheticCdiClass(String className) {
-        return className.contains("$$");
+        return className.contains("$$") || className.contains("$HibernateProxy$");
     }
 
     // Non static inner class is not allowed to be bean class

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019 the HotswapAgent authors.
+ * Copyright 2013-2022 the HotswapAgent authors.
  *
  * This file is part of HotswapAgent.
  *
@@ -142,6 +142,8 @@ public class ClassPathBeanDefinitionScannerAgent {
      * @throws IOException error working with classDefinition
      */
     public static void refreshClass(String basePackage, byte[] classDefinition) throws IOException {
+        ResetSpringStaticCaches.reset();
+
         ClassPathBeanDefinitionScannerAgent scannerAgent = getInstance(basePackage);
         if (scannerAgent == null) {
             LOGGER.error("basePackage '{}' not associated with any scannerAgent", basePackage);
